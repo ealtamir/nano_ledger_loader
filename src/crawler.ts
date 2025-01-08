@@ -34,9 +34,9 @@ export class NanoCrawler {
     const values: any[] = [];
     
     for (const [hash, info] of Object.entries(blocks)) {
-        if (info.contents.confirmed !== undefined && !info.contents.confirmed) {
-            continue;
-        }
+        // if (info.contents.confirmed !== undefined && !info.contents.confirmed) {
+        //     continue;
+        // }
         placeholders.push("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         values.push(
             hash,
@@ -63,7 +63,7 @@ export class NanoCrawler {
     if (placeholders.length === 0) return;
 
     const query = `
-        INSERT OR IGNORE INTO blocks (
+        INSERT INTO blocks (
             hash,
             type,
             account,
@@ -85,7 +85,7 @@ export class NanoCrawler {
     `.trim();  // Remove any trailing whitespace
 
     try {
-      const result = this.db.query(query, values);
+      await this.db.query(query, values);
     } catch (error) {
       log.error(`Failed to save blocks: ${error instanceof Error ? error.message : String(error)}`);
       throw error; // Re-throw to be handled by caller
@@ -118,7 +118,7 @@ export class NanoCrawler {
     await this.addToPendingAccounts(account);
   }
 
-  private getNewBlocks(allBlocks: string[]): string[] {
+  private async getNewBlocks(allBlocks: string[]): Promise<string[]> {
     if (allBlocks.length === 0) return [];
     
     try {
@@ -128,7 +128,7 @@ export class NanoCrawler {
         // Process blocks in chunks
         for (let i = 0; i < allBlocks.length; i += CHUNK_SIZE) {
             const chunk = allBlocks.slice(i, i + CHUNK_SIZE);
-            const existingBlocksChunk = this.db.query<[string]>(
+            const existingBlocksChunk = await this.db.query<[string]>(
                 "SELECT hash FROM blocks WHERE hash IN (" + chunk.map(() => "?").join(",") + ")",
                 chunk
             );
@@ -165,7 +165,8 @@ export class NanoCrawler {
 
       if (chainResponse.blocks && chainResponse.blocks.length > 0) {
         // Use the new method to filter blocks
-        const newBlocks = this.getNewBlocks(chainResponse.blocks);
+        const newBlocks = await this.getNewBlocks(chainResponse.blocks);
+        // const newBlocks = chainResponse.blocks;
         
         if (newBlocks.length === 0) {
             log.info(`No new blocks after filtering found for account ${account}`);
@@ -173,14 +174,14 @@ export class NanoCrawler {
             let processedChunks = 0;
             for await (const blocksInfoResponse of this.rpc.getBlocksInfo(newBlocks)) {
                 // Save all blocks in one transaction
-                this.db.transaction(() => {
-                    this.saveBlocks(blocksInfoResponse.blocks);
+                this.db.transaction(async () => {
+                    await this.saveBlocks(blocksInfoResponse.blocks);
                     
                     // Queue new accounts found in blocks
                     for (const info of Object.values(blocksInfoResponse.blocks)) {
                         const new_address = info.contents.link_as_account || info.contents.destination;
                         if (new_address) {
-                            this.queueAccount(new_address);
+                            await this.queueAccount(new_address);
                         }
                     }
                 });
@@ -198,8 +199,10 @@ export class NanoCrawler {
       }
 
       // Mark account as processed and remove from pending
-      await this.saveAccount(account);
-      await this.removeFromPendingAccounts(account);
+      this.db.transaction(async () => {
+        await this.saveAccount(account);
+        await this.removeFromPendingAccounts(account);
+      });
       
     } catch (error: unknown) {
       throw new Error(`Failed to process account ${account}: ${error instanceof Error ? error.message : String(error)}`);

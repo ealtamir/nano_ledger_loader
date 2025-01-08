@@ -5,7 +5,7 @@ let db: DB | null = null;
 export function initializeDatabase(): DB {
     if (db) return db;
 
-    db = new DB("./nano.db");
+    db = new DB("./nano.db", {mode: "create"});
 
     // Create accounts table
     db.execute(`
@@ -28,10 +28,10 @@ export function initializeDatabase(): DB {
         CREATE TABLE IF NOT EXISTS blocks (
             hash TEXT PRIMARY KEY,
             type TEXT NOT NULL,
-            account TEXT NOT NULL,
+            account TEXT,
             previous TEXT,
             representative TEXT,
-            balance TEXT,
+            balance INTEGER,
             link TEXT,
             link_as_account TEXT,
             destination TEXT,
@@ -41,8 +41,8 @@ export function initializeDatabase(): DB {
             height INTEGER,
             confirmed BOOLEAN,
             successor TEXT,
-            amount TEXT,
-            local_timestamp TEXT
+            amount INTEGER,
+            local_timestamp TIMESTAMP
         )
     `);
     db.execute(`CREATE INDEX IF NOT EXISTS idx_blocks_account ON blocks(account)`);
