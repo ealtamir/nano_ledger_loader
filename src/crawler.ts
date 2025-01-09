@@ -1,119 +1,144 @@
-import { NanoRPC } from './nano-rpc.ts';
-import { BlockInfo } from './types.ts';
-import { DB } from "sqlite";
+import { NanoRPC } from "./nano-rpc.ts";
+import { BlockInfo } from "./types.ts";
 import { log } from "./logger.ts";
+import { Database } from "jsr:@db/sqlite@0.12";
 
 export class NanoCrawler {
   private rpc: NanoRPC;
   private accountQueue: string[];
-  private db: DB;
+  private db: Database;  // <-- better-sqlite3 Database instance
 
-  constructor(rpcUrl: string, db: DB) {
+  constructor(rpcUrl: string, db: Database) {
     this.rpc = new NanoRPC(rpcUrl);
     this.accountQueue = [];
     this.db = db;
   }
 
   private async isAccountProcessed(account: string): Promise<boolean> {
-    const result = this.db.query<[string]>(
-      "SELECT account FROM accounts WHERE account = ?",
-      [account]
-    );
-    return result.length > 0;
+    // better-sqlite3: use .get(...) to fetch a single row
+    const stmt = this.db.prepare("SELECT account FROM accounts WHERE account = ?");
+    const row = stmt.get(account);
+    return row !== undefined;
   }
 
   private async saveAccount(account: string): Promise<void> {
-    this.db.query("INSERT OR IGNORE INTO accounts (account) VALUES (?)", [account]);
+    // Use .run(...) for INSERT/UPDATE/DELETE statements
+    const stmt = this.db.prepare("INSERT OR IGNORE INTO accounts (account) VALUES (?)");
+    stmt.run(account);
   }
 
-  private async saveBlocks(blocks: {[key: string]: BlockInfo}): Promise<void> {
+  private async saveBlocks(blocks: { [key: string]: BlockInfo }): Promise<void> {
     if (Object.keys(blocks).length === 0) return;
 
     // Build bulk insert query
-    const placeholders: string[] = [];
     const values: any[] = [];
-    
-    for (const [hash, info] of Object.entries(blocks)) {
-        // if (info.contents.confirmed !== undefined && !info.contents.confirmed) {
-        //     continue;
-        // }
+
+    const entries = Object.entries(blocks)
+    for (const [hash, info] of entries as [string, BlockInfo][]) {
         if (info.contents.type !== "state") {
-            continue;
+      values.push([
+        hash,
+        info.contents.type,
+        info.block_account,
+        info.contents.previous || null,
+        null,
+        info.balance || null,
+        info.contents.link || null,
+        info.contents.link_as_account || info.contents.destination || null,
+        null,
+        info.contents.signature,
+        info.contents.work,
+        info.contents.type || null,
+        info.height,
+        info.confirmed === 'true' ? 1 : 0,
+        info.successor || null,
+        info.amount || null,
+        info.local_timestamp || null
+      ]);
+        } else {
+      values.push([
+        hash,
+        info.contents.type,
+        info.contents.account,
+        info.contents.previous || null,
+        info.contents.representative || null,
+        info.contents.balance || null,
+        info.contents.link || null,
+        info.contents.link_as_account || null,
+        info.contents.destination || null,
+        info.contents.signature,
+        info.contents.work,
+        info.contents.subtype || info.subtype || null,
+        info.height,
+        info.confirmed ? 1 : 0,
+        info.successor || null,
+        info.amount || null,
+        info.local_timestamp || null
+      ]);
         }
-        placeholders.push("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        values.push(
-            hash,
-            info.contents.type,
-            info.contents.account,
-            info.contents.previous || null,
-            info.contents.representative || null,
-            info.contents.balance || null,
-            info.contents.link || null,
-            info.contents.link_as_account || null,
-            info.contents.destination || null,
-            info.contents.signature,
-            info.contents.work,
-            info.contents.subtype || null,
-            info.height,
-            info.confirmed ? 1 : 0,
-            info.successor || null,
-            info.amount || null,
-            info.local_timestamp || null
-        );
     }
+    if (values.length === 0) return;
 
     // If no valid blocks to insert, return early
-    if (placeholders.length === 0) return;
-
     const query = `
-        INSERT INTO blocks (
-            hash,
-            type,
-            account,
-            previous,
-            representative,
-            balance,
-            link,
-            link_as_account,
-            destination,
-            signature,
-            work,
-            subtype,
-            height,
-            confirmed,
-            successor,
-            amount,
-            local_timestamp
-        ) VALUES ${placeholders.join(", ")}
-    `.trim();  // Remove any trailing whitespace
+      INSERT INTO blocks (
+        hash,
+        type,
+        account,
+        previous,
+        representative,
+        balance,
+        link,
+        link_as_account,
+        destination,
+        signature,
+        work,
+        subtype,
+        height,
+        confirmed,
+        successor,
+        amount,
+        local_timestamp
+      ) VALUES (${values[0].map(() => "?").join(",")})
+    `.trim();
 
     try {
-      await this.db.query(query, values);
+      // better-sqlite3 can insert all rows in one go as long as you match placeholders with values
+      const info = this.db.prepare(query);
+
+      const insertMany = this.db.transaction((rows: any[]) => {
+        for (const row of rows) {
+          info.run(row);
+        }
+      });
+      await insertMany.immediate(values);
+      info.finalize();
     } catch (error) {
-      log.error(`Failed to save blocks: ${error instanceof Error ? error.message : String(error)}`);
+      log.error(
+        `Failed to save blocks: ${error instanceof Error ? error.message : String(error)}`
+      );
       throw error; // Re-throw to be handled by caller
     }
   }
 
   private async addToPendingAccounts(account: string): Promise<void> {
-    this.db.query(
-      "INSERT OR IGNORE INTO pending_accounts (account) VALUES (?)",
-      [account]
+    const stmt = this.db.prepare(
+      "INSERT OR IGNORE INTO pending_accounts (account) VALUES (?)"
     );
+    stmt.run(account);
   }
 
   private async removeFromPendingAccounts(account: string): Promise<void> {
-    this.db.query(
-      "DELETE FROM pending_accounts WHERE account = ?",
-      [account]
-    );
+    const stmt = this.db.prepare("DELETE FROM pending_accounts WHERE account = ?");
+    stmt.run(account);
   }
 
   private async loadPendingAccounts(): Promise<string[]> {
-    const results = this.db.query<[string]>(
+    const stmt = this.db.prepare(
       "SELECT account FROM pending_accounts ORDER BY id"
     );
-    return results.map(row => row[0]);
+    const rows = stmt.all() as Array<{ account: string }>;
+    return rows.map((row) => row.account);
   }
 
   public async queueAccount(account: string): Promise<void> {
@@ -123,27 +148,35 @@ export class NanoCrawler {
 
   private async getNewBlocks(allBlocks: string[]): Promise<string[]> {
     if (allBlocks.length === 0) return [];
-    
+
     try {
-        const CHUNK_SIZE = 500; // SQLite typically has a limit of 1000 variables
-        const existingBlocksSet = new Set<string>();
+      const CHUNK_SIZE = 500; // better-sqlite3 also has a limit on variables
+      const existingBlocksSet = new Set<string>();
 
-        // Process blocks in chunks
-        for (let i = 0; i < allBlocks.length; i += CHUNK_SIZE) {
-            const chunk = allBlocks.slice(i, i + CHUNK_SIZE);
-            const existingBlocksChunk = await this.db.query<[string]>(
-                "SELECT hash FROM blocks WHERE hash IN (" + chunk.map(() => "?").join(",") + ")",
-                chunk
-            );
-            existingBlocksChunk.forEach(row => existingBlocksSet.add(row[0]));
-        }
+      for (let i = 0; i < allBlocks.length; i += CHUNK_SIZE) {
+        const chunk = allBlocks.slice(i, i + CHUNK_SIZE);
 
-        const newBlocks = allBlocks.filter(hash => !existingBlocksSet.has(hash));
-        log.info(`Found ${newBlocks.length} new blocks from ${allBlocks.length} total blocks`);
-        return newBlocks;
+        // We build the query with placeholders for each item in the chunk
+        const query = `
+          SELECT hash FROM blocks 
+          WHERE hash IN (${chunk.map(() => "?").join(",")})
+        `;
+        const stmt = this.db.prepare(query);
+        const existingBlocksChunk = stmt.all(chunk) as Array<{ hash: string }>;
+
+        existingBlocksChunk.forEach((row) => existingBlocksSet.add(row.hash));
+      }
+
+      const newBlocks = allBlocks.filter((hash) => !existingBlocksSet.has(hash));
+      log.info(
+        `Found ${newBlocks.length} new blocks from ${allBlocks.length} total blocks`
+      );
+      return newBlocks;
     } catch (error) {
-        log.error(`Failed to query existing blocks: ${error instanceof Error ? error.message : String(error)}`);
-        throw error; // Re-throw to be handled by caller
+      log.error(
+        `Failed to query existing blocks: ${error instanceof Error ? error.message : String(error)}`
+      );
+      throw error; // Re-throw to be handled by caller
     }
   }
 
@@ -155,7 +188,7 @@ export class NanoCrawler {
     try {
       // Get account info and all its blocks
       const ledgerResponse = await this.rpc.getLedger(account);
-      
+
       if (!ledgerResponse.accounts || !ledgerResponse.accounts[account]) {
         log.warn(`No ledger data found for account ${account}`);
         await this.removeFromPendingAccounts(account);
@@ -164,68 +197,70 @@ export class NanoCrawler {
 
       const accountInfo = ledgerResponse.accounts[account];
       const chainResponse = await this.rpc.getChain(accountInfo.frontier);
-      log.info(`Processing account ${account} - Found ${chainResponse.blocks?.length || 0} blocks`);
+      log.info(
+        `Processing account ${account} - Found ${chainResponse.blocks?.length || 0} blocks`
+      );
 
       if (chainResponse.blocks && chainResponse.blocks.length > 0) {
-        // Use the new method to filter blocks
         const newBlocks = await this.getNewBlocks(chainResponse.blocks);
-        // const newBlocks = chainResponse.blocks;
-        
-        if (newBlocks.length === 0) {
-            log.info(`No new blocks after filtering found for account ${account}`);
-        } else {
-            let processedChunks = 0;
-            for await (const blocksInfoResponse of this.rpc.getBlocksInfo(newBlocks)) {
-                // Save all blocks in one transaction
-                await this.saveBlocks(blocksInfoResponse.blocks);
-                
-                // Queue new accounts found in blocks
-                for (const info of Object.values(blocksInfoResponse.blocks)) {
-                    const new_address = info.contents.link_as_account || info.contents.destination;
-                    if (new_address) {
-                        await this.queueAccount(new_address);
-                    }
-                }
 
-      
-                // Log progress every 5 chunks
-                processedChunks++;
-                if (processedChunks % 10 === 0) {
-                    const keysQuantity = Object.keys(blocksInfoResponse.blocks).length;
-                    const processedBlocks = Math.min(processedChunks * keysQuantity, newBlocks.length);
-                    log.info(`Processed ${processedBlocks} out of ${newBlocks.length} blocks`);
-                }
+        if (newBlocks.length === 0) {
+          log.info(`No new blocks after filtering found for account ${account}`);
+        } else {
+          let processedChunks = 0;
+          for await (const blocksInfoResponse of this.rpc.getBlocksInfo(newBlocks)) {
+            await this.saveBlocks(blocksInfoResponse.blocks);
+
+            // Queue new accounts found in blocks
+            for (const info of Object.values(blocksInfoResponse.blocks)) {
+              const newAddress = info.contents.link_as_account || info.contents.destination;
+              if (newAddress) {
+                await this.queueAccount(newAddress);
+              }
             }
+
+            // Log progress every 10 chunks
+            processedChunks++;
+            if (processedChunks % 25 === 0) {  // 10k blocks
+              const keysQuantity = Object.keys(blocksInfoResponse.blocks).length;
+              const processedBlocks = Math.min(
+                processedChunks * keysQuantity,
+                newBlocks.length
+              );
+              log.info(
+                `Processed ${processedBlocks} out of ${newBlocks.length} blocks`
+              );
+            }
+          }
         }
       }
 
       // Mark account as processed and remove from pending
-    await this.saveAccount(account);
-    await this.removeFromPendingAccounts(account);
-      
+      await this.saveAccount(account);
+      await this.removeFromPendingAccounts(account);
     } catch (error: unknown) {
-      throw new Error(`Failed to process account ${account}: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to process account ${account}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     }
   }
 
-  async crawl(genesisAccount: string): Promise<void> {
-
-    // Flag to track if we should continue processing
+  public async crawl(genesisAccount: string): Promise<void> {
     let shouldContinue = true;
-
-    let forceQuit = false;
     let lastSignalTime = 0;
-    
+
     const signalHandler = () => {
       const now = Date.now();
-      if (now - lastSignalTime < 1000) { // If second press within 1 second
-        log.info('\nForce quitting...');
+      if (now - lastSignalTime < 1000) {
+        log.info("\nForce quitting...");
         Deno.exit(1);
       }
-      
+
       lastSignalTime = now;
-      log.info('\nReceived shutdown signal. Finishing current account and exiting...');
-      log.info('Press Ctrl+C again to force quit immediately.');
+      log.info("\nReceived shutdown signal. Finishing current account and exiting...");
+      log.info("Press Ctrl+C again to force quit immediately.");
       shouldContinue = false;
     };
 
@@ -248,7 +283,7 @@ export class NanoCrawler {
             // Add back to queue to retry later
             await this.queueAccount(account);
             // Wait before retrying
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
           }
         }
 
@@ -259,7 +294,7 @@ export class NanoCrawler {
         if (pendingAccounts.length === 0) {
           break; // No more accounts to process
         } else {
-            log.info(`Processing ${pendingAccounts.length} pending accounts`);
+          log.info(`Processing ${pendingAccounts.length} pending accounts`);
         }
 
         // Add pending accounts back to queue
@@ -273,6 +308,6 @@ export class NanoCrawler {
       Deno.removeSignalListener("SIGTERM", signalHandler);
     }
 
-    log.info('Crawler stopped.');
+    log.info("Crawler stopped.");
   }
-} 
+}

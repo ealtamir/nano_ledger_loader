@@ -4,6 +4,6 @@
     },
     "imports": {
         "@std/assert": "jsr:@std/assert@1",
-        "sqlite": "https://deno.land/x/sqlite@v3.9.1/mod.ts"
+        "better-sqlite3": "https://deno.land/x/better_sqlite3@v0.1.0/mod.ts"
     }
 }

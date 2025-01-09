@@ -12,7 +12,7 @@ if (import.meta.main) {
 
   const db = initializeDatabase();
   const crawler = new NanoCrawler(RPC_ENDPOINT, db);
-//  const wsClient = new NanoWebSocket(WS_ENDPOINT, crawler);
+  const wsClient = new NanoWebSocket(WS_ENDPOINT, crawler);
   
   try {
     await crawler.crawl(GENESIS_ACCOUNT);

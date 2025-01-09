@@ -71,7 +71,7 @@ export class NanoRPC {
   }
 
   async *getBlocksInfo(blocks: string[]): AsyncGenerator<BlocksInfoResponse> {
-    const MAX_BLOCKS_PER_CALL = 10;
+    const MAX_BLOCKS_PER_CALL = 40;
     log.info(`Getting blocks info for ${blocks.length} blocks`);
 
     let processedChunks = 0;
