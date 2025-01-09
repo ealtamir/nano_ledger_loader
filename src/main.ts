@@ -17,6 +17,8 @@ if (import.meta.main) {
   try {
     await crawler.crawl(GENESIS_ACCOUNT);
     log.info("Exploration completed successfully!");
+    wsClient.close();
+    db.close();
   } catch (error) {
     console.error("Exploration failed:", error);
     Deno.exit(1);
