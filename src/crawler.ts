@@ -37,6 +37,9 @@ export class NanoCrawler {
         // if (info.contents.confirmed !== undefined && !info.contents.confirmed) {
         //     continue;
         // }
+        if (info.contents.type !== "state") {
+            continue;
+        }
         placeholders.push("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         values.push(
             hash,
@@ -50,7 +53,7 @@ export class NanoCrawler {
             info.contents.destination || null,
             info.contents.signature,
             info.contents.work,
-            info.subtype || null,
+            info.contents.subtype || null,
             info.height,
             info.confirmed ? 1 : 0,
             info.successor || null,
@@ -174,17 +177,15 @@ export class NanoCrawler {
             let processedChunks = 0;
             for await (const blocksInfoResponse of this.rpc.getBlocksInfo(newBlocks)) {
                 // Save all blocks in one transaction
-                this.db.transaction(async () => {
-                    await this.saveBlocks(blocksInfoResponse.blocks);
-                    
-                    // Queue new accounts found in blocks
-                    for (const info of Object.values(blocksInfoResponse.blocks)) {
-                        const new_address = info.contents.link_as_account || info.contents.destination;
-                        if (new_address) {
-                            await this.queueAccount(new_address);
-                        }
+                await this.saveBlocks(blocksInfoResponse.blocks);
+                
+                // Queue new accounts found in blocks
+                for (const info of Object.values(blocksInfoResponse.blocks)) {
+                    const new_address = info.contents.link_as_account || info.contents.destination;
+                    if (new_address) {
+                        await this.queueAccount(new_address);
                     }
-                });
+                }
 
       
                 // Log progress every 5 chunks
@@ -199,10 +200,8 @@ export class NanoCrawler {
       }
 
       // Mark account as processed and remove from pending
-      this.db.transaction(async () => {
-        await this.saveAccount(account);
-        await this.removeFromPendingAccounts(account);
-      });
+    await this.saveAccount(account);
+    await this.removeFromPendingAccounts(account);
       
     } catch (error: unknown) {
       throw new Error(`Failed to process account ${account}: ${error instanceof Error ? error.message : String(error)}`);
