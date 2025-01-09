@@ -3,10 +3,13 @@ import * as log from "jsr:@std/log";
 // Store the last log message and timestamp
 let lastLog = { msg: "", time: 0 };
 
+// Check for debug flag in arguments
+const isDebug = Deno.args.includes("--debug");
+
 // Configure the logger
 await log.setup({
   handlers: {
-    console: new log.ConsoleHandler("DEBUG", {
+    console: new log.ConsoleHandler(isDebug ? "DEBUG" : "INFO", {
       formatter: (record) => {
         // Check if this is a duplicate message within 500ms
         const now = Date.now();
@@ -24,7 +27,7 @@ await log.setup({
   },
   loggers: {
     default: {
-      level: "DEBUG",
+      level: isDebug ? "DEBUG" : "INFO",
       handlers: ["console"],
     },
   },

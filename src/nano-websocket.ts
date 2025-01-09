@@ -61,7 +61,7 @@ export class NanoWebSocket {
     });
 
     this.ws.addEventListener("close", () => {
-      log.info("Connection closed");
+      log.debug("Connection closed");
       this.handleReconnect();
     });
 
@@ -74,7 +74,7 @@ export class NanoWebSocket {
   private handleReconnect() {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      log.info(
+      log.warn(
         `Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`
       );
       setTimeout(
@@ -119,7 +119,7 @@ export class NanoWebSocket {
     for (const account of accounts) {
       try {
         await this.crawler.queueAccount(account);
-        log.info(`Queued account ${account} from new block ${message.message.hash}`);
+        log.debug(`Queued account ${account} from new block ${message.message.hash}`);
       } catch (error) {
         log.error(`Failed to queue account ${account}: ${error instanceof Error ? error.message : String(error)}`);
       }

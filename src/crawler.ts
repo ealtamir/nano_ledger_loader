@@ -2,16 +2,19 @@ import { NanoRPC } from "./nano-rpc.ts";
 import { BlockInfo } from "./types.ts";
 import { log } from "./logger.ts";
 import { Database } from "jsr:@db/sqlite@0.12";
+import { CrawlerMetrics } from "./metrics.ts";
 
 export class NanoCrawler {
   private rpc: NanoRPC;
   private accountQueue: string[];
   private db: Database;  // <-- better-sqlite3 Database instance
+  private metrics: CrawlerMetrics;  // Add this line
 
   constructor(rpcUrl: string, db: Database) {
     this.rpc = new NanoRPC(rpcUrl);
     this.accountQueue = [];
     this.db = db;
+    this.metrics = new CrawlerMetrics(1000 * 30);  // Print logs every 30 seconds
   }
 
   private async isAccountProcessed(account: string): Promise<boolean> {
@@ -168,7 +171,7 @@ export class NanoCrawler {
       }
 
       const newBlocks = allBlocks.filter((hash) => !existingBlocksSet.has(hash));
-      log.info(
+      log.debug(
         `Found ${newBlocks.length} new blocks from ${allBlocks.length} total blocks`
       );
       return newBlocks;
@@ -197,7 +200,7 @@ export class NanoCrawler {
 
       const accountInfo = ledgerResponse.accounts[account];
       const chainResponse = await this.rpc.getChain(accountInfo.frontier);
-      log.info(
+      log.debug(
         `Processing account ${account} - Found ${chainResponse.blocks?.length || 0} blocks`
       );
 
@@ -205,11 +208,12 @@ export class NanoCrawler {
         const newBlocks = await this.getNewBlocks(chainResponse.blocks);
 
         if (newBlocks.length === 0) {
-          log.info(`No new blocks after filtering found for account ${account}`);
+          log.debug(`No new blocks after filtering found for account ${account}`);
         } else {
           let processedChunks = 0;
           for await (const blocksInfoResponse of this.rpc.getBlocksInfo(newBlocks)) {
             await this.saveBlocks(blocksInfoResponse.blocks);
+            this.metrics.addBlocks(Object.keys(blocksInfoResponse.blocks).length);
 
             // Queue new accounts found in blocks
             for (const info of Object.values(blocksInfoResponse.blocks)) {
@@ -227,7 +231,7 @@ export class NanoCrawler {
                 processedChunks * keysQuantity,
                 newBlocks.length
               );
-              log.info(
+              log.debug(
                 `Processed ${processedBlocks} out of ${newBlocks.length} blocks`
               );
             }
@@ -238,6 +242,7 @@ export class NanoCrawler {
       // Mark account as processed and remove from pending
       await this.saveAccount(account);
       await this.removeFromPendingAccounts(account);
+      this.metrics.addAccount();
     } catch (error: unknown) {
       throw new Error(
         `Failed to process account ${account}: ${

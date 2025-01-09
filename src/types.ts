@@ -30,7 +30,7 @@ export interface BlockInfo {
   balance: string;
   height: number;
   local_timestamp: string;
-  confirmed: boolean;
+  confirmed: boolean | 'true' | 'false';
   subtype: string;
   successor: string;
   contents: Block;
