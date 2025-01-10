@@ -193,7 +193,7 @@ export class NanoCrawler {
       const ledgerResponse = await this.rpc.getLedger(account);
 
       if (!ledgerResponse.accounts || !ledgerResponse.accounts[account]) {
-        log.info(`No ledger data found for account ${account}`);
+        log.debug(`No ledger data found for account ${account}`);
         await this.removeFromPendingAccounts(account);
         return;
       }
