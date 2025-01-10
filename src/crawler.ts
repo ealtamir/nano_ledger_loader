@@ -84,7 +84,7 @@ export class NanoCrawler {
 
     // If no valid blocks to insert, return early
     const query = `
-      INSERT INTO blocks (
+      INSERT OR IGNORE INTO blocks (
         hash,
         type,
         account,
