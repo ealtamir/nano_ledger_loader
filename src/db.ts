@@ -10,21 +10,22 @@ export function initializeDatabase(): Database {
 
   // By default, 'fileMustExist: false' means the file will be created if it doesn't exist.
   // If you specifically need to create only if not existing, you can adjust the options as needed.
-  db = new Database("./nano_A.db");
+  db = new Database("./nano.db");
   // Executing pragma statements
-    db.exec("pragma journal_mode = WAL");
-    db.exec("pragma synchronous = normal");
-    db.exec("pragma temp_store = memory");
+  db.exec("pragma journal_mode = WAL");         // WAL mode for better concurrency and write performance
+  db.exec("pragma synchronous = NORMAL");      // Balance durability and performance
+  db.exec("pragma temp_store = MEMORY");       // Temporary data stored in memory
+  db.exec("pragma cache_size = -1048576");     // ~1GB for cache (negative for KB)
+  db.exec("pragma locking_mode = NORMAL");     // Normal locking mode for safe multi-process access
+  db.exec("pragma mmap_size = 2147483648");    // 2GB memory-mapped I/O
+  db.exec("pragma foreign_keys = OFF");        // Disable foreign key checks for inserts
+  db.exec("pragma page_size = 65536");         // 64KB page size (requires rebuilding the database)
 
   // Create accounts table
   db.exec(`
     CREATE TABLE IF NOT EXISTS accounts (
       account TEXT PRIMARY KEY
     )
-  `);
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_account 
-    ON accounts(account)
   `);
 
   // Create pending_accounts table
@@ -42,7 +43,8 @@ export function initializeDatabase(): Database {
   // Create blocks table
   db.exec(`
     CREATE TABLE IF NOT EXISTS blocks (
-      hash TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      hash TEXT UNIQUE,
       type TEXT,
       account TEXT,
       previous TEXT,
@@ -60,14 +62,6 @@ export function initializeDatabase(): Database {
       amount INTEGER,
       local_timestamp INTEGER
     )
-  `);
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_blocks_account 
-    ON blocks(account)
-  `);
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_blocks_hash 
-    ON blocks(hash)
   `);
 
   return db;

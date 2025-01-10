@@ -114,7 +114,7 @@ export class NanoCrawler {
           info.run(row);
         }
       });
-      await insertMany.immediate(values);
+      await insertMany(values);
       info.finalize();
     } catch (error) {
       log.error(
