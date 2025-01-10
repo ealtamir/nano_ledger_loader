@@ -205,7 +205,8 @@ export class NanoCrawler {
       );
 
       if (chainResponse.blocks && chainResponse.blocks.length > 0) {
-        const newBlocks = await this.getNewBlocks(chainResponse.blocks);
+        // const newBlocks = await this.getNewBlocks(chainResponse.blocks);
+        const newBlocks = chainResponse.blocks;
 
         if (newBlocks.length === 0) {
           log.debug(`No new blocks after filtering found for account ${account}`);
