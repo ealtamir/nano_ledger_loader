@@ -193,7 +193,7 @@ export class NanoCrawler {
       const ledgerResponse = await this.rpc.getLedger(account);
 
       if (!ledgerResponse.accounts || !ledgerResponse.accounts[account]) {
-        log.warn(`No ledger data found for account ${account}`);
+        log.info(`No ledger data found for account ${account}`);
         await this.removeFromPendingAccounts(account);
         return;
       }
@@ -297,7 +297,8 @@ export class NanoCrawler {
         // When queue is empty, check pending_accounts
         const pendingAccounts = await this.loadPendingAccounts();
         if (pendingAccounts.length === 0) {
-          break; // No more accounts to process
+          log.info("No more pending accounts to process. Waiting for new blocks...");
+          await new Promise((resolve) => setTimeout(resolve, 5000));
         } else {
           log.info(`Processing ${pendingAccounts.length} pending accounts`);
         }
