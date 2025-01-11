@@ -64,10 +64,39 @@ export class NanoRPC {
   }
 
   async getChain(block: string, count: number = -1): Promise<ChainResponse> {
-    return await this.makeRPCCall<ChainResponse>('chain', {
-      block,
-      count: count,
-    });
+    const CHAIN_QUERY_BATCH = 50000;
+    let currentBlock = block;
+    let allBlocks: string[] = [];
+    let shouldContinue = true;
+
+    while (shouldContinue) {
+      const response = await this.makeRPCCall<ChainResponse>('chain', {
+        block: currentBlock,
+        count: count === -1 ? CHAIN_QUERY_BATCH : count,
+      });
+
+      // If this is a single query (count !== -1), return the response directly
+      if (count !== -1) {
+        return response;
+      }
+
+      allBlocks = allBlocks.concat(response.blocks || []);
+
+      // Stop conditions:
+      // 1. Empty blocks list
+      // 2. Less blocks than batch size (reached the end)
+      // 3. Single block that's the same as our query (no more history)
+      if (!response.blocks?.length || 
+          response.blocks.length < CHAIN_QUERY_BATCH ||
+          (response.blocks.length === 1 && response.blocks[0] === currentBlock)) {
+        shouldContinue = false;
+      } else {
+        // Get the last (oldest) hash for the next query
+        currentBlock = response.blocks[response.blocks.length - 1];
+      }
+    }
+
+    return { blocks: allBlocks };
   }
 
   async *getBlocksInfo(blocks: string[]): AsyncGenerator<BlocksInfoResponse> {
