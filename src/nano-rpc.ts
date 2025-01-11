@@ -99,12 +99,47 @@ export class NanoRPC {
     return { blocks: allBlocks };
   }
 
+  async *getChainGenerator(block: string, count: number = -1): AsyncGenerator<string[]> {
+    const CHAIN_QUERY_BATCH = 50000;
+    let currentBlock = block;
+    let shouldContinue = true;
+
+    while (shouldContinue) {
+      const response = await this.makeRPCCall<ChainResponse>('chain', {
+        block: currentBlock,
+        count: count === -1 ? CHAIN_QUERY_BATCH : count,
+      });
+
+      // If this is a single query (count !== -1), yield and return
+      if (count !== -1) {
+        yield response.blocks || [];
+        return;
+      }
+
+      // Yield the current batch of blocks
+      if (response.blocks?.length) {
+        yield response.blocks;
+      }
+
+      // Stop conditions:
+      // 1. Empty blocks list
+      // 2. Less blocks than batch size (reached the end)
+      // 3. Single block that's the same as our query (no more history)
+      if (!response.blocks?.length || 
+          response.blocks.length < CHAIN_QUERY_BATCH ||
+          (response.blocks.length === 1 && response.blocks[0] === currentBlock)) {
+        shouldContinue = false;
+      } else {
+        // Get the last (oldest) hash for the next query
+        currentBlock = response.blocks[response.blocks.length - 1];
+      }
+    }
+  }
+
   async *getBlocksInfo(blocks: string[]): AsyncGenerator<BlocksInfoResponse> {
     const MAX_BLOCKS_PER_CALL = 40;
     log.debug(`Getting blocks info for ${blocks.length} blocks`);
 
-    let processedChunks = 0;
-    
     for (let i = 0; i < blocks.length; i += MAX_BLOCKS_PER_CALL) {
       const blockChunk = blocks.slice(i, i + MAX_BLOCKS_PER_CALL);
       const response = await this.makeRPCCall<BlocksInfoResponse>('blocks_info', {

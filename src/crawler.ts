@@ -199,45 +199,47 @@ export class NanoCrawler {
       }
 
       const accountInfo = ledgerResponse.accounts[account];
-      const chainResponse = await this.rpc.getChain(accountInfo.frontier);
-      log.debug(
-        `Processing account ${account} - Found ${chainResponse.blocks?.length || 0} blocks`
-      );
+      let totalBlocks = 0;
+      let processedChunks = 0;
 
-      if (chainResponse.blocks && chainResponse.blocks.length > 0) {
-        // const newBlocks = await this.getNewBlocks(chainResponse.blocks);
-        const newBlocks = chainResponse.blocks;
+      // Process blocks as they come in from the chain
+      for await (const blockBatch of this.rpc.getChainGenerator(accountInfo.frontier)) {
+        totalBlocks += blockBatch.length;
 
-        if (newBlocks.length === 0) {
-          log.debug(`No new blocks after filtering found for account ${account}`);
-        } else {
-          let processedChunks = 0;
-          for await (const blocksInfoResponse of this.rpc.getBlocksInfo(newBlocks)) {
-            await this.saveBlocks(blocksInfoResponse.blocks);
-            this.metrics.addBlocks(Object.keys(blocksInfoResponse.blocks).length);
+        if (blockBatch.length === 0) {
+          break;
+        }
+        
+        // Process each batch of blocks
+        for await (const blocksInfoResponse of this.rpc.getBlocksInfo(blockBatch)) {
+          await this.saveBlocks(blocksInfoResponse.blocks);
+          this.metrics.addBlocks(Object.keys(blocksInfoResponse.blocks).length);
 
-            // Queue new accounts found in blocks
-            for (const info of Object.values(blocksInfoResponse.blocks)) {
-              const newAddress = info.contents.link_as_account || info.contents.destination;
-              if (newAddress) {
-                await this.queueAccount(newAddress);
-              }
-            }
-
-            // Log progress every 10 chunks
-            processedChunks++;
-            if (processedChunks % 25 === 0) {  // 10k blocks
-              const keysQuantity = Object.keys(blocksInfoResponse.blocks).length;
-              const processedBlocks = Math.min(
-                processedChunks * keysQuantity,
-                newBlocks.length
-              );
-              log.debug(
-                `Processed ${processedBlocks} out of ${newBlocks.length} blocks`
-              );
+          // Queue new accounts found in blocks
+          for (const info of Object.values(blocksInfoResponse.blocks)) {
+            const newAddress = info.contents.link_as_account || info.contents.destination;
+            if (newAddress) {
+              await this.queueAccount(newAddress);
             }
           }
+
+          // Log progress every 25 chunks
+          processedChunks++;
+          if (processedChunks % 25 === 0) {  // 10k blocks
+            const keysQuantity = Object.keys(blocksInfoResponse.blocks).length;
+            const processedBlocks = Math.min(
+              processedChunks * keysQuantity,
+              totalBlocks
+            );
+            log.debug(
+              `Processed ${processedBlocks} out of ${totalBlocks} blocks`
+            );
+          }
         }
+      }
+
+      if (totalBlocks === 0) {
+        log.debug(`No blocks found for account ${account}`);
       }
 
       // Mark account as processed and remove from pending
