@@ -125,10 +125,15 @@ export class NanoCrawler {
   }
 
   private async addToPendingAccounts(account: string): Promise<void> {
-    const stmt = this.db.prepare(
+    // Remove from processed accounts first
+    const removeStmt = this.db.prepare("DELETE FROM accounts WHERE account = ?");
+    removeStmt.run(account);
+
+    // Then add to pending accounts
+    const insertStmt = this.db.prepare(
       "INSERT OR IGNORE INTO pending_accounts (account) VALUES (?)"
     );
-    stmt.run(account);
+    insertStmt.run(account);
   }
 
   private async removeFromPendingAccounts(account: string): Promise<void> {
@@ -195,6 +200,7 @@ export class NanoCrawler {
       if (!ledgerResponse.accounts || !ledgerResponse.accounts[account]) {
         log.debug(`No ledger data found for account ${account}`);
         await this.removeFromPendingAccounts(account);
+        this.metrics.addAccount();
         return;
       }
 
