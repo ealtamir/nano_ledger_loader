@@ -170,7 +170,7 @@ export class NanoCrawler {
           WHERE hash IN (${chunk.map(() => "?").join(",")})
         `;
         const stmt = this.db.prepare(query);
-        const existingBlocksChunk = stmt.all(chunk) as Array<{ hash: string }>;
+        const existingBlocksChunk = await stmt.all(chunk) as Array<{ hash: string }>;
 
         existingBlocksChunk.forEach((row) => existingBlocksSet.add(row.hash));
       }
@@ -210,14 +210,15 @@ export class NanoCrawler {
 
       // Process blocks as they come in from the chain
       for await (const blockBatch of this.rpc.getChainGenerator(accountInfo.frontier)) {
-        totalBlocks += blockBatch.length;
+        const newBlocks = await this.getNewBlocks(blockBatch);
+        totalBlocks += newBlocks.length;
 
-        if (blockBatch.length === 0) {
+        if (newBlocks.length === 0) {
           break;
         }
         
         // Process each batch of blocks
-        for await (const blocksInfoResponse of this.rpc.getBlocksInfo(blockBatch)) {
+        for await (const blocksInfoResponse of this.rpc.getBlocksInfo(newBlocks)) {
           await this.saveBlocks(blocksInfoResponse.blocks);
           this.metrics.addBlocks(Object.keys(blocksInfoResponse.blocks).length);
 

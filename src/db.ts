@@ -63,6 +63,10 @@ export function initializeDatabase(): Database {
       local_timestamp INTEGER
     )
   `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_block_hash 
+    ON blocks(hash)
+  `);
 
   return db;
 }
