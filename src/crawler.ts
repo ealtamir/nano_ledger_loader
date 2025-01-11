@@ -44,7 +44,7 @@ export class NanoCrawler {
         info.contents.type,
         info.block_account,
         info.contents.previous || null,
-        null,
+        info.contents.representative || null,
         info.balance || null,
         info.contents.link || null,
         info.contents.link_as_account || info.contents.destination || null,
