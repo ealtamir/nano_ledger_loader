@@ -6,30 +6,23 @@ export class CrawlerMetrics {
   private startTime: number;
   private lastReportTime: number;
   private reportIntervalMs: number;
+  private intervalHandler: number | null = null;
 
   constructor(reportIntervalMs = 60000) { // Default to reporting every minute
     this.startTime = Date.now();
     this.lastReportTime = this.startTime;
     this.reportIntervalMs = reportIntervalMs;
+    this.intervalHandler = setInterval(() => this.reportMetrics(), this.reportIntervalMs);
   }
 
   public addBlocks(count: number): void {
     this.blocksProcessed += count;
-    this.checkAndReport();
   }
 
   public addAccount(): void {
     this.accountsProcessed++;
-    this.checkAndReport();
   }
 
-  private checkAndReport(): void {
-    const now = Date.now();
-    if (now - this.lastReportTime >= this.reportIntervalMs) {
-      this.reportMetrics();
-      this.lastReportTime = now;
-    }
-  }
 
   private reportMetrics(): void {
     const elapsedSeconds = (Date.now() - this.startTime) / 1000;
@@ -46,10 +39,20 @@ export class CrawlerMetrics {
     );
   }
 
+  public cleanup(): void {
+    if (this.intervalHandler) {
+      clearInterval(this.intervalHandler);
+      this.intervalHandler = null;
+    }
+  }
+
   public reset(): void {
     this.blocksProcessed = 0;
     this.accountsProcessed = 0;
     this.startTime = Date.now();
     this.lastReportTime = this.startTime;
+    if (!this.intervalHandler) {
+      this.intervalHandler = setInterval(() => this.reportMetrics(), this.reportIntervalMs);
+    }
   }
 }
