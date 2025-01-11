@@ -188,23 +188,12 @@ export class NanoCrawler {
     }
   }
 
-  private async processAccount(account: string): Promise<void> {
+  private async processAccount(account: string, accountInfo: any): Promise<void> {
     if (await this.isAccountProcessed(account)) {
       return;
     }
 
     try {
-      // Get account info and all its blocks
-      const ledgerResponse = await this.rpc.getLedger(account);
-
-      if (!ledgerResponse.accounts || !ledgerResponse.accounts[account]) {
-        log.debug(`No ledger data found for account ${account}`);
-        await this.removeFromPendingAccounts(account);
-        this.metrics.addAccount();
-        return;
-      }
-
-      const accountInfo = ledgerResponse.accounts[account];
       let totalBlocks = 0;
       let processedChunks = 0;
 
@@ -262,6 +251,47 @@ export class NanoCrawler {
     }
   }
 
+  private async processBatch(accounts: string[]): Promise<void> {
+    try {
+      // Step 1: Get ledger data for all accounts in parallel, but with individual calls
+      const ledgerPromises = accounts.map(account => this.rpc.getLedger(account));
+      const ledgerResponses = await Promise.allSettled(ledgerPromises);
+      
+      // Step 2: Process accounts sequentially using the buffered ledger data
+      for (let i = 0; i < accounts.length; i++) {
+        const account = accounts[i];
+        const ledgerResult = ledgerResponses[i];
+        
+        try {
+          if (ledgerResult.status === 'fulfilled') {
+            const ledgerResponse = ledgerResult.value;
+            if (ledgerResponse.accounts?.[account]) {
+              await this.processAccount(account, ledgerResponse.accounts[account]);
+            } else {
+              log.debug(`No ledger data found for account ${account}`);
+              await this.removeFromPendingAccounts(account);
+              this.metrics.addAccount();
+            }
+          } else {
+            log.error(`Failed to get ledger data for ${account}: ${ledgerResult.reason}`);
+            await this.queueAccount(account);
+          }
+        } catch (error) {
+          log.error(`Error processing account ${account}: ${error}`);
+          await this.queueAccount(account);
+        }
+      }
+    } catch (error) {
+      log.error(`Batch processing failed: ${error}`);
+      for (const account of accounts) {
+        await this.queueAccount(account);
+      }
+    }
+
+    // Add delay after batch to prevent overwhelming the node
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
   public async crawl(genesisAccount: string): Promise<void> {
     let shouldContinue = true;
     let lastSignalTime = 0;
@@ -284,25 +314,14 @@ export class NanoCrawler {
     Deno.addSignalListener("SIGTERM", signalHandler);
 
     try {
-      // Start with genesis account
       await this.queueAccount(genesisAccount);
 
       while (shouldContinue) {
-        // Process accounts in queue
         while (shouldContinue && this.accountQueue.length > 0) {
-          const account = this.accountQueue.shift()!;
-          try {
-            await this.processAccount(account);
-          } catch (error) {
-            console.error(`Error processing account ${account}:`, error);
-            // Add back to queue to retry later
-            await this.queueAccount(account);
-            // Wait before retrying
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-          }
+          // Process up to 100 accounts at a time
+          const batch = this.accountQueue.splice(0, 100);
+          await this.processBatch(batch);
         }
-
-        if (!shouldContinue) break;
 
         // When queue is empty, check pending_accounts
         const pendingAccounts = await this.loadPendingAccounts();
