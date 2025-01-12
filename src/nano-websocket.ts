@@ -118,7 +118,7 @@ export class NanoWebSocket {
     // Queue all relevant accounts for processing
     for (const account of accounts) {
       try {
-        await this.crawler.queueAccount(account);
+        await this.crawler.queueAccount(account, true);
         log.debug(`Queued account ${account} from new block ${message.message.hash}`);
       } catch (error) {
         log.error(`Failed to queue account ${account}: ${error instanceof Error ? error.message : String(error)}`);

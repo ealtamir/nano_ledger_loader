@@ -124,10 +124,13 @@ export class NanoCrawler {
     }
   }
 
-  private async addToPendingAccounts(account: string): Promise<void> {
-    // Remove from processed accounts first
-    const removeStmt = this.db.prepare("DELETE FROM accounts WHERE account = ?");
-    removeStmt.run(account);
+  private async addToPendingAccounts(account: string, nodeWebsocket: boolean = false): Promise<void> {
+    // This is needed because accounts coming from websocket force us to reanalyze the whole chain
+    // in search for new accounts.
+    if (nodeWebsocket) {
+      const removeStmt = this.db.prepare("DELETE FROM accounts WHERE account = ?");
+      removeStmt.run(account);
+    }
 
     // Then add to pending accounts
     const insertStmt = this.db.prepare(
@@ -149,9 +152,9 @@ export class NanoCrawler {
     return rows.map((row) => row.account);
   }
 
-  public async queueAccount(account: string): Promise<void> {
+  public async queueAccount(account: string, nodeWebsocket: boolean = false): Promise<void> {
     this.accountQueue.push(account);
-    await this.addToPendingAccounts(account);
+    await this.addToPendingAccounts(account, nodeWebsocket);
   }
 
   private async getNewBlocks(allBlocks: string[]): Promise<string[]> {
