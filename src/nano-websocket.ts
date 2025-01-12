@@ -25,7 +25,7 @@ export class NanoWebSocket {
   private pingTimeout: number = 5000; // 5 seconds
   private pingTimer?: number;
   private pongReceived: boolean = false;
-
+  private shouldContinue: boolean = true;
   constructor(
     private readonly wsAddress: string,
     private readonly crawler: NanoCrawler
@@ -72,6 +72,11 @@ export class NanoWebSocket {
   }
 
   private handleReconnect() {
+    if (!this.shouldContinue) {
+      log.debug("Not reconnecting as connection was intentionally closed");
+      return;
+    }
+
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       log.warn(
@@ -156,6 +161,7 @@ export class NanoWebSocket {
     this.stopPingInterval();
     if (this.ws) {
       this.ws.close();
+      this.shouldContinue = false;
     }
   }
 

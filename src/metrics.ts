@@ -39,6 +39,10 @@ export class CrawlerMetrics {
     );
   }
 
+  public stop(): void {
+    this.cleanup();
+  }
+
   public cleanup(): void {
     if (this.intervalHandler) {
       clearInterval(this.intervalHandler);

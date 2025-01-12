@@ -3,6 +3,7 @@ import { BlockInfo } from "./types.ts";
 import { log } from "./logger.ts";
 import { Database } from "jsr:@db/sqlite@0.12";
 import { CrawlerMetrics } from "./metrics.ts";
+import { denoCacheDir } from "jsr:@denosaurs/plug@1/util";
 
 export class NanoCrawler {
   private rpc: NanoRPC;
@@ -10,11 +11,14 @@ export class NanoCrawler {
   private db: Database;  // <-- better-sqlite3 Database instance
   private metrics: CrawlerMetrics;  // Add this line
 
+  private shouldContinue: boolean = true;
+
   constructor(rpcUrl: string, db: Database) {
     this.rpc = new NanoRPC(rpcUrl);
     this.accountQueue = [];
     this.db = db;
     this.metrics = new CrawlerMetrics(1000 * 30);  // Print logs every 30 seconds
+    this.shouldContinue = true;
   }
 
   private async isAccountProcessed(account: string): Promise<boolean> {
@@ -208,14 +212,27 @@ export class NanoCrawler {
         if (newBlocks.length === 0) {
           break;
         }
-        
+
+        if (!this.shouldContinue) {
+          log.info(`Shutdown requested. Finishing current account and exiting...`);
+          break;
+        }
+
         // Process each batch of blocks
         for await (const blocksInfoResponse of this.rpc.getBlocksInfo(newBlocks)) {
+          if (!this.shouldContinue) {
+            log.info(`Shutdown requested. Finishing current account and exiting...`);
+            break;
+          }
           await this.saveBlocks(blocksInfoResponse.blocks);
           this.metrics.addBlocks(Object.keys(blocksInfoResponse.blocks).length);
 
           // Queue new accounts found in blocks
           for (const info of Object.values(blocksInfoResponse.blocks)) {
+            if (!this.shouldContinue) {
+              log.info(`Shutdown requested. Finishing current account and exiting...`);
+              break;
+            }
             const newAddress = info.contents.link_as_account || info.contents.destination;
             if (newAddress) {
               await this.queueAccount(newAddress);
@@ -242,9 +259,11 @@ export class NanoCrawler {
       }
 
       // Mark account as processed and remove from pending
-      await this.saveAccount(account);
-      await this.removeFromPendingAccounts(account);
-      this.metrics.addAccount();
+      if (this.shouldContinue) {
+        await this.saveAccount(account);
+        await this.removeFromPendingAccounts(account);
+        this.metrics.addAccount();
+      }
     } catch (error: unknown) {
       throw new Error(
         `Failed to process account ${account}: ${
@@ -264,7 +283,11 @@ export class NanoCrawler {
       for (let i = 0; i < accounts.length; i++) {
         const account = accounts[i];
         const ledgerResult = ledgerResponses[i];
-        
+
+        if (!this.shouldContinue) {
+          log.info(`Shutdown requested. Finishing current account and exiting...`);
+          break;
+        }
         try {
           if (ledgerResult.status === 'fulfilled') {
             const ledgerResponse = ledgerResult.value;
@@ -296,7 +319,6 @@ export class NanoCrawler {
   }
 
   public async crawl(genesisAccount: string): Promise<void> {
-    let shouldContinue = true;
     let lastSignalTime = 0;
 
     const signalHandler = () => {
@@ -309,7 +331,7 @@ export class NanoCrawler {
       lastSignalTime = now;
       log.info("\nReceived shutdown signal. Finishing current account and exiting...");
       log.info("Press Ctrl+C again to force quit immediately.");
-      shouldContinue = false;
+      this.shouldContinue = false;
     };
 
     // Handle both SIGINT (Ctrl+C) and SIGTERM
@@ -319,8 +341,8 @@ export class NanoCrawler {
     try {
       await this.queueAccount(genesisAccount);
 
-      while (shouldContinue) {
-        while (shouldContinue && this.accountQueue.length > 0) {
+      while (this.shouldContinue) {
+        while (this.shouldContinue && this.accountQueue.length > 0) {
           // Process up to 100 accounts at a time
           const batch = this.accountQueue.splice(0, 100);
           await this.processBatch(batch);
@@ -344,6 +366,7 @@ export class NanoCrawler {
       // Clean up signal handlers
       Deno.removeSignalListener("SIGINT", signalHandler);
       Deno.removeSignalListener("SIGTERM", signalHandler);
+      this.metrics.stop();
     }
 
     log.info("Crawler stopped.");
