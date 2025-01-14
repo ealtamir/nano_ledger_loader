@@ -222,6 +222,7 @@ export class NanoCrawler {
         totalBlocks += newBlocks.length;
 
         if (newBlocks.length === 0) {
+          log.debug(`No new blocks found for ${account}`);
           break;
         }
 
