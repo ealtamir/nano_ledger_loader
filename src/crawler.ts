@@ -209,6 +209,7 @@ export class NanoCrawler {
 
   private async processAccount(account: string, accountInfo: any): Promise<void> {
     if (await this.isAccountProcessed(account)) {
+      log.debug(`Skipping ${account} already processed`);
       return;
     }
 
