@@ -351,13 +351,16 @@ export class NanoCrawler {
     Deno.addSignalListener("SIGTERM", signalHandler);
 
     try {
-      await this.queueAccount(genesisAccount);
+      this.accountQueue.push(genesisAccount);
 
       while (this.shouldContinue) {
         while (this.shouldContinue && this.accountQueue.length > 0) {
           // Process up to 100 accounts at a time
           const batch = this.accountQueue.splice(0, 100);
           await this.processBatch(batch);
+        } 
+        if (!this.shouldContinue) {
+          break;
         }
 
         // When queue is empty, check pending_accounts
@@ -366,7 +369,7 @@ export class NanoCrawler {
           log.info("No more pending accounts to process. Waiting for new blocks...");
           await new Promise((resolve) => setTimeout(resolve, 5000));
         } else {
-          log.info(`Processing batch of ${pendingAccounts.length} pending accounts`);
+          log.debug(`Processing batch of ${pendingAccounts.length} pending accounts`);
         }
 
         // Add pending accounts back to queue
