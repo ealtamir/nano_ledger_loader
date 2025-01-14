@@ -129,18 +129,30 @@ export class NanoCrawler {
   }
 
   private async addToPendingAccounts(account: string, nodeWebsocket: boolean = false): Promise<void> {
-    // This is needed because accounts coming from websocket force us to reanalyze the whole chain
-    // in search for new accounts.
-    if (nodeWebsocket) {
-      const removeStmt = this.db.prepare("DELETE FROM accounts WHERE account = ?");
-      removeStmt.run(account);
-    }
+    try {
+      // Create a transaction for both operations
+      const transaction = this.db.transaction((account: string) => {
+        if (nodeWebsocket) {
+          const removeStmt = this.db.prepare("DELETE FROM accounts WHERE account = ?");
+          removeStmt.run(account);
+        }
 
-    // Then add to pending accounts
-    const insertStmt = this.db.prepare(
-      "INSERT OR IGNORE INTO pending_accounts (account) VALUES (?)"
-    );
-    insertStmt.run(account);
+        const insertStmt = this.db.prepare(
+          "INSERT OR IGNORE INTO pending_accounts (account) VALUES (?)"
+        );
+        insertStmt.run(account);
+      });
+
+      // Execute the transaction
+      transaction(account);
+    } catch (error) {
+      log.error(
+        `Failed to add account ${account} to pending: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      throw error; // Re-throw to be handled by caller
+    }
   }
 
   private async removeFromPendingAccounts(account: string): Promise<void> {
@@ -157,7 +169,7 @@ export class NanoCrawler {
   }
 
   public async queueAccount(account: string, nodeWebsocket: boolean = false): Promise<void> {
-    this.accountQueue.push(account);
+    // this.accountQueue.push(account);
     await this.addToPendingAccounts(account, nodeWebsocket);
   }
 
