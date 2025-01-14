@@ -209,7 +209,6 @@ export class NanoCrawler {
 
   private async processAccount(account: string, accountInfo: any): Promise<void> {
     if (await this.isAccountProcessed(account)) {
-      log.debug(`Skipping ${account} already processed`);
       return;
     }
 
@@ -305,6 +304,7 @@ export class NanoCrawler {
           if (ledgerResult.status === 'fulfilled') {
             const ledgerResponse = ledgerResult.value;
             if (ledgerResponse.accounts?.[account]) {
+              log.debug(`Processing ${account}`);
               await this.processAccount(account, ledgerResponse.accounts[account]);
             } else {
               log.debug(`No ledger data found for account ${account}`);
