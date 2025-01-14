@@ -29,9 +29,26 @@ export class NanoCrawler {
   }
 
   private async saveAccount(account: string): Promise<void> {
-    // Use .run(...) for INSERT/UPDATE/DELETE statements
-    const stmt = this.db.prepare("INSERT OR IGNORE INTO accounts (account) VALUES (?)");
-    stmt.run(account);
+    try {
+      // Create a transaction for both operations
+      const transaction = this.db.transaction((account: string) => {
+        // Insert into accounts
+        const insertStmt = this.db.prepare("INSERT OR IGNORE INTO accounts (account) VALUES (?)");
+        insertStmt.run(account);
+
+        // Remove from pending_accounts
+        const deleteStmt = this.db.prepare("DELETE FROM pending_accounts WHERE account = ?");
+        deleteStmt.run(account);
+      });
+
+      // Execute the transaction
+      transaction(account);
+    } catch (error) {
+      log.error(
+        `Failed to save account ${account}: ${error instanceof Error ? error.message : String(error)}`
+      );
+      throw error;
+    }
   }
 
   private async saveBlocks(blocks: { [key: string]: BlockInfo }): Promise<void> {
@@ -160,7 +177,29 @@ export class NanoCrawler {
     stmt.run(account);
   }
 
-  private async loadPendingAccounts(batchSize: number = 100): Promise<string[]> {
+  private async removeAccounts(accounts: string[]): Promise<void> {
+    // Skip if no accounts to remove
+    if (accounts.length === 0) return;
+
+    try {
+      // Create and execute transaction
+      const transaction = this.db.transaction((accounts: string[]) => {
+        const stmt = this.db.prepare("DELETE FROM accounts WHERE account = ?");
+        for (const account of accounts) {
+          stmt.run(account);
+        }
+      });
+
+      transaction(accounts);
+    } catch (error) {
+      log.error(
+        `Failed to remove accounts: ${error instanceof Error ? error.message : String(error)}`
+      );
+      throw error;
+    }
+  }
+
+  private async loadPendingAccounts(batchSize: number = 1000): Promise<string[]> {
     const stmt = this.db.prepare(
       "SELECT account FROM pending_accounts ORDER BY id LIMIT ?"
     );
@@ -222,7 +261,6 @@ export class NanoCrawler {
         totalBlocks += newBlocks.length;
 
         if (newBlocks.length === 0) {
-          log.debug(`No new blocks found for ${account}`);
           break;
         }
 
@@ -274,7 +312,6 @@ export class NanoCrawler {
       // Mark account as processed and remove from pending
       if (this.shouldContinue) {
         await this.saveAccount(account);
-        await this.removeFromPendingAccounts(account);
         this.metrics.addAccount();
       }
     } catch (error: unknown) {
@@ -372,6 +409,10 @@ export class NanoCrawler {
           await new Promise((resolve) => setTimeout(resolve, 5000));
         } else {
           log.debug(`Processing batch of ${pendingAccounts.length} pending accounts`);
+
+          // This is done as a precaution for cases where accounts were added to pending
+          // and not remove from the list of processed accounts.
+          this.removeAccounts(pendingAccounts);
         }
 
         // Add pending accounts back to queue
