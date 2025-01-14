@@ -148,11 +148,11 @@ export class NanoCrawler {
     stmt.run(account);
   }
 
-  private async loadPendingAccounts(): Promise<string[]> {
+  private async loadPendingAccounts(batchSize: number = 100): Promise<string[]> {
     const stmt = this.db.prepare(
-      "SELECT account FROM pending_accounts ORDER BY id"
+      "SELECT account FROM pending_accounts ORDER BY id LIMIT ?"
     );
-    const rows = stmt.all() as Array<{ account: string }>;
+    const rows = stmt.all(batchSize) as Array<{ account: string }>;
     return rows.map((row) => row.account);
   }
 
@@ -354,7 +354,7 @@ export class NanoCrawler {
           log.info("No more pending accounts to process. Waiting for new blocks...");
           await new Promise((resolve) => setTimeout(resolve, 5000));
         } else {
-          log.info(`Processing ${pendingAccounts.length} pending accounts`);
+          log.info(`Processing batch of ${pendingAccounts.length} pending accounts`);
         }
 
         // Add pending accounts back to queue
