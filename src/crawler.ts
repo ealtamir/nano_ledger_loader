@@ -3,8 +3,7 @@ import { BlockInfo } from "./types.ts";
 import { log } from "./logger.ts";
 import { Database } from "jsr:@db/sqlite@0.12";
 import { CrawlerMetrics } from "./metrics.ts";
-import { denoCacheDir } from "jsr:@denosaurs/plug@1/util";
-
+import { config } from "./config_loader.ts";
 export class NanoCrawler {
   private rpc: NanoRPC;
   private accountQueue: string[];
@@ -199,7 +198,10 @@ export class NanoCrawler {
     }
   }
 
-  private async loadPendingAccounts(batchSize: number = 1000): Promise<string[]> {
+  private async loadPendingAccounts(batchSize: number = -1): Promise<string[]> {
+    if (batchSize === -1) {
+      batchSize = config.pending_accounts_batch_size;
+    }
     const stmt = this.db.prepare(
       "SELECT account FROM pending_accounts ORDER BY id LIMIT ?"
     );
@@ -216,7 +218,7 @@ export class NanoCrawler {
     if (allBlocks.length === 0) return [];
 
     try {
-      const CHUNK_SIZE = 500; // better-sqlite3 also has a limit on variables
+      const CHUNK_SIZE = config.new_blocks_batch_size; // better-sqlite3 also has a limit on variables
       const existingBlocksSet = new Set<string>();
 
       for (let i = 0; i < allBlocks.length; i += CHUNK_SIZE) {
@@ -253,7 +255,6 @@ export class NanoCrawler {
 
     try {
       let totalBlocks = 0;
-      let processedChunks = 0;
 
       // Process blocks as they come in from the chain
       for await (const blockBatch of this.rpc.getChainGenerator(accountInfo.frontier)) {
@@ -290,18 +291,18 @@ export class NanoCrawler {
             }
           }
 
-          // Log progress every 25 chunks
-          processedChunks++;
-          if (processedChunks % 25 === 0) {  // 10k blocks
-            const keysQuantity = Object.keys(blocksInfoResponse.blocks).length;
-            const processedBlocks = Math.min(
-              processedChunks * keysQuantity,
-              totalBlocks
-            );
-            log.debug(
-              `Processed ${processedBlocks} out of ${totalBlocks} blocks`
-            );
-          }
+          // // Log progress every 25 chunks
+          // processedChunks++;
+          // if (processedChunks % 25 === 0) {  // 10k blocks
+          //   const keysQuantity = Object.keys(blocksInfoResponse.blocks).length;
+          //   const processedBlocks = Math.min(
+          //     processedChunks * keysQuantity,
+          //     totalBlocks
+          //   );
+          //   log.debug(
+          //     `Processed ${processedBlocks} out of ${totalBlocks} blocks`
+          //   );
+          // }
         }
       }
 
@@ -366,7 +367,7 @@ export class NanoCrawler {
     }
 
     // Add delay after batch to prevent overwhelming the node
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
   public async crawl(genesisAccount: string): Promise<void> {

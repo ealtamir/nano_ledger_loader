@@ -1,4 +1,5 @@
-import { BlockInfo, BlocksInfoResponse, ChainResponse, LedgerResponse } from "./types.ts";
+import { BlocksInfoResponse, ChainResponse, LedgerResponse } from "./types.ts";
+import { config } from "./config_loader.ts";
 import { log } from "./logger.ts";
 
 export class NanoRPC {
@@ -9,8 +10,8 @@ export class NanoRPC {
   }
 
   private async makeRPCCall<T>(action: string, params: Record<string, unknown>): Promise<T> {
-    const maxRetries = 3;
-    const timeout = 30000; // 30 seconds
+    const maxRetries = config.rpc_call_max_retries;
+    const timeout = config.rpc_call_timeout_ms;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -53,7 +54,10 @@ export class NanoRPC {
     throw new Error('Unexpected end of retry loop');
   }
 
-  async getLedger(account: string, count: number = 1000): Promise<LedgerResponse> {
+  async getLedger(account: string, count: number = -1): Promise<LedgerResponse> {
+    if (count === -1) {
+      count = config.account_processing_batch_size;
+    }
     return await this.makeRPCCall<LedgerResponse>('ledger', {
       account,
       count: count.toString(),
@@ -64,7 +68,7 @@ export class NanoRPC {
   }
 
   async getChain(block: string, count: number = -1): Promise<ChainResponse> {
-    const CHAIN_QUERY_BATCH = 50000;
+    const CHAIN_QUERY_BATCH = config.chain_query_batch_size;
     let currentBlock = block;
     let allBlocks: string[] = [];
     let shouldContinue = true;
@@ -100,7 +104,7 @@ export class NanoRPC {
   }
 
   async *getChainGenerator(block: string, count: number = -1): AsyncGenerator<string[]> {
-    const CHAIN_QUERY_BATCH = 50000;
+    const CHAIN_QUERY_BATCH = config.chain_query_batch_size;
     let currentBlock = block;
     let shouldContinue = true;
 
@@ -137,7 +141,7 @@ export class NanoRPC {
   }
 
   async *getBlocksInfo(blocks: string[]): AsyncGenerator<BlocksInfoResponse> {
-    const MAX_BLOCKS_PER_CALL = 40;
+    const MAX_BLOCKS_PER_CALL = config.blocks_info_batch_size;
     log.debug(`Getting blocks info for ${blocks.length} blocks`);
 
     for (let i = 0; i < blocks.length; i += MAX_BLOCKS_PER_CALL) {
