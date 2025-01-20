@@ -67,6 +67,10 @@ export function initializeDatabase(): Database {
     CREATE INDEX IF NOT EXISTS idx_block_hash 
     ON blocks(hash)
   `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_block_local_timestamp 
+    ON blocks(local_timestamp)
+  `);
 
   return db;
 }

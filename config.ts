@@ -8,6 +8,7 @@ export const config = {
 
   // Batch size to query for new blocks
   new_blocks_batch_size: 999,
+  new_block_filter_enabled: true,
 
   // Delay between processing accounts
   per_batch_delay_ms: 1_000,
@@ -17,6 +18,9 @@ export const config = {
 
   // Batch size for the blocks info RPC call
   blocks_info_batch_size: 40,
+
+  // How many blocks to insert at a time
+  block_insert_batch_size: 40,
 
   // How many accounts are retrieved from the pending queue at a time
   // this is different to how many accounts are retrieved from the DB
