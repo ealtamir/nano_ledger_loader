@@ -4,6 +4,7 @@ import { log } from "./logger.ts";
 import { Database } from "jsr:@db/sqlite@0.12";
 import { CrawlerMetrics } from "./metrics.ts";
 import { config } from "./config_loader.ts";
+import { Logger } from "jsr:@std/log/get-logger";
 export class NanoCrawler {
   private rpc: NanoRPC;
   private accountQueue: string[];
@@ -217,6 +218,8 @@ export class NanoCrawler {
   private async getNewBlocks(allBlocks: string[]): Promise<string[]> {
     if (allBlocks.length === 0) return [];
 
+    log.debug(`Getting new blocks data for ${allBlocks.length} blocks`);
+
     try {
       const CHUNK_SIZE = config.new_blocks_batch_size; // better-sqlite3 also has a limit on variables
       const existingBlocksSet = new Set<string>();
@@ -259,10 +262,11 @@ export class NanoCrawler {
       // Process blocks as they come in from the chain
       for await (const blockBatch of this.rpc.getChainGenerator(accountInfo.frontier)) {
         const newBlocks = await this.getNewBlocks(blockBatch);
-        totalBlocks += newBlocks.length;
 
         if (newBlocks.length === 0) {
           break;
+        } else {
+          totalBlocks += newBlocks.length;
         }
 
         if (!this.shouldContinue) {
