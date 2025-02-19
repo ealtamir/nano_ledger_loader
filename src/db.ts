@@ -1,4 +1,4 @@
-
+import { config } from "./config_loader.ts";
 import { Database } from "jsr:@db/sqlite@0.12";
 
 let db: Database | null = null;
@@ -35,10 +35,12 @@ export function initializeDatabase(): Database {
       account TEXT NOT NULL UNIQUE
     )
   `);
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_pending_account 
-    ON pending_accounts(account)
-  `);
+  if (config.indexes_enabled) {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_pending_account 
+      ON pending_accounts(account)
+    `);
+  }
 
   // Create blocks table
   db.exec(`
@@ -63,14 +65,16 @@ export function initializeDatabase(): Database {
       local_timestamp INTEGER
     )
   `);
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_block_hash 
-    ON blocks(hash)
-  `);
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_block_local_timestamp 
-    ON blocks(local_timestamp)
-  `);
+  if (config.indexes_enabled) {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_block_hash 
+      ON blocks(hash)
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_block_local_timestamp 
+      ON blocks(local_timestamp)
+    `);
+  }
 
   return db;
 }

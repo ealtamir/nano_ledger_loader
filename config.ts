@@ -32,4 +32,8 @@ export const config = {
 
   // Maximum number of retries for RPC calls
   rpc_call_max_retries: 3,
+
+  // Whether to identify new blocks
+  identify_new_blocks: false,
+  indexes_enabled: false,
 };

@@ -12,6 +12,8 @@ const ConfigSchema = z.object({
   account_processing_batch_size: z.number().default(100),
   rpc_call_timeout_ms: z.number().default(30_000),
   rpc_call_max_retries: z.number().default(3),
+  identify_new_blocks: z.boolean().default(true),
+  indexes_enabled: z.boolean().default(false),
 });
 
 // Create a type from the schema

@@ -218,6 +218,9 @@ export class NanoCrawler {
   private async getNewBlocks(allBlocks: string[]): Promise<string[]> {
     if (allBlocks.length === 0) return [];
 
+    if (!config.identify_new_blocks) {
+      return allBlocks;
+    }
     log.debug(`Getting new blocks data for ${allBlocks.length} blocks`);
 
     try {
@@ -295,18 +298,6 @@ export class NanoCrawler {
             }
           }
 
-          // // Log progress every 25 chunks
-          // processedChunks++;
-          // if (processedChunks % 25 === 0) {  // 10k blocks
-          //   const keysQuantity = Object.keys(blocksInfoResponse.blocks).length;
-          //   const processedBlocks = Math.min(
-          //     processedChunks * keysQuantity,
-          //     totalBlocks
-          //   );
-          //   log.debug(
-          //     `Processed ${processedBlocks} out of ${totalBlocks} blocks`
-          //   );
-          // }
         }
       }
 
