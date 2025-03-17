@@ -4,16 +4,20 @@ import { log } from "./logger.ts";
 import { NanoWebSocket } from "./nano-websocket.ts";
 
 if (import.meta.main) {
-  const GENESIS_ACCOUNT = "nano_3t6k35gi95xu6tergt6p69ck76ogmitsa8mnijtpxm9fkcm736xtoncuohr3";
-  const hostname = Deno.args.find(arg => !arg.startsWith('--')) || "127.0.0.1";
+  const GENESIS_ACCOUNT =
+    "nano_3t6k35gi95xu6tergt6p69ck76ogmitsa8mnijtpxm9fkcm736xtoncuohr3";
+  const hostname = Deno.args.find((arg) => !arg.startsWith("--")) ||
+    "127.0.0.1";
   const RPC_ENDPOINT = `http://${hostname}:7076`;
   const WS_ENDPOINT = `ws://${hostname}:7078`;
-  const DATA_DIR = "./nano_data";
+
+  log.info(`Starting Nano Crawler with RPC endpoint ${RPC_ENDPOINT}`);
+  log.info(`Starting Nano Crawler with WS endpoint ${WS_ENDPOINT}`);
 
   const db = initializeDatabase();
   const crawler = new NanoCrawler(RPC_ENDPOINT, db);
   const wsClient = new NanoWebSocket(WS_ENDPOINT, crawler);
-  
+
   try {
     await crawler.crawl(GENESIS_ACCOUNT);
     log.info("Exploration completed successfully!");

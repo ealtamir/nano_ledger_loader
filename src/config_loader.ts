@@ -1,5 +1,5 @@
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
-import { config as configTemplate } from '../config.ts';
+import { config as configTemplate } from "../config.ts";
 
 // Define the configuration schema
 const ConfigSchema = z.object({
@@ -14,6 +14,7 @@ const ConfigSchema = z.object({
   rpc_call_max_retries: z.number().default(3),
   identify_new_blocks: z.boolean().default(true),
   indexes_enabled: z.boolean().default(false),
+  block_insert_batch_size: z.number().default(50),
 });
 
 // Create a type from the schema

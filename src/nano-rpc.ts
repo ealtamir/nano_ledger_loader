@@ -1,4 +1,9 @@
-import { BlocksInfoResponse, ChainResponse, LedgerResponse } from "./types.ts";
+import {
+  AccountInfoResponse,
+  BlocksInfoResponse,
+  ChainResponse,
+  LedgerResponse,
+} from "./types.ts";
 import { config } from "./config_loader.ts";
 import { log } from "./logger.ts";
 
@@ -9,7 +14,10 @@ export class NanoRPC {
     this.rpcUrl = rpcUrl;
   }
 
-  private async makeRPCCall<T>(action: string, params: Record<string, unknown>): Promise<T> {
+  private async makeRPCCall<T>(
+    action: string,
+    params: Record<string, unknown>,
+  ): Promise<T> {
     const maxRetries = config.rpc_call_max_retries;
     const timeout = config.rpc_call_timeout_ms;
 
@@ -18,14 +26,14 @@ export class NanoRPC {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeout);
         const body = JSON.stringify({
-            action,
-            ...params,
-          });
+          action,
+          ...params,
+        });
 
         const response = await fetch(this.rpcUrl, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
           body,
           signal: controller.signal,
@@ -41,24 +49,31 @@ export class NanoRPC {
       } catch (error: unknown) {
         const isLastAttempt = attempt === maxRetries - 1;
         if (isLastAttempt) {
-          throw new Error(`Failed after ${maxRetries} attempts: ${error instanceof Error ? error.message : String(error)}`);
+          throw new Error(
+            `Failed after ${maxRetries} attempts: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
         }
 
         // Exponential backoff: 1s, 2s, 4s...
         const backoffTime = Math.pow(2, attempt) * 1000;
-        await new Promise(resolve => setTimeout(resolve, backoffTime));
+        await new Promise((resolve) => setTimeout(resolve, backoffTime));
       }
     }
 
     // TypeScript needs this even though it's unreachable
-    throw new Error('Unexpected end of retry loop');
+    throw new Error("Unexpected end of retry loop");
   }
 
-  async getLedger(account: string, count: number = -1): Promise<LedgerResponse> {
+  async getLedger(
+    account: string,
+    count: number = -1,
+  ): Promise<LedgerResponse> {
     if (count === -1) {
       count = config.account_processing_batch_size;
     }
-    return await this.makeRPCCall<LedgerResponse>('ledger', {
+    return await this.makeRPCCall<LedgerResponse>("ledger", {
       account,
       count: count.toString(),
       representative: "true",
@@ -74,7 +89,7 @@ export class NanoRPC {
     let shouldContinue = true;
 
     while (shouldContinue) {
-      const response = await this.makeRPCCall<ChainResponse>('chain', {
+      const response = await this.makeRPCCall<ChainResponse>("chain", {
         block: currentBlock,
         count: count === -1 ? CHAIN_QUERY_BATCH : count,
       });
@@ -90,9 +105,11 @@ export class NanoRPC {
       // 1. Empty blocks list
       // 2. Less blocks than batch size (reached the end)
       // 3. Single block that's the same as our query (no more history)
-      if (!response.blocks?.length || 
-          response.blocks.length < CHAIN_QUERY_BATCH ||
-          (response.blocks.length === 1 && response.blocks[0] === currentBlock)) {
+      if (
+        !response.blocks?.length ||
+        response.blocks.length < CHAIN_QUERY_BATCH ||
+        (response.blocks.length === 1 && response.blocks[0] === currentBlock)
+      ) {
         shouldContinue = false;
       } else {
         // Get the last (oldest) hash for the next query
@@ -103,13 +120,16 @@ export class NanoRPC {
     return { blocks: allBlocks };
   }
 
-  async *getChainGenerator(block: string, count: number = -1): AsyncGenerator<string[]> {
+  async *getSuccessorsGenerator(
+    block: string,
+    count: number = -1,
+  ): AsyncGenerator<string[]> {
     const CHAIN_QUERY_BATCH = config.chain_query_batch_size;
     let currentBlock = block;
     let shouldContinue = true;
 
     while (shouldContinue) {
-      const response = await this.makeRPCCall<ChainResponse>('chain', {
+      const response = await this.makeRPCCall<ChainResponse>("successors", {
         block: currentBlock,
         count: count === -1 ? CHAIN_QUERY_BATCH : count,
       });
@@ -129,9 +149,11 @@ export class NanoRPC {
       // 1. Empty blocks list
       // 2. Less blocks than batch size (reached the end)
       // 3. Single block that's the same as our query (no more history)
-      if (!response.blocks?.length || 
-          response.blocks.length < CHAIN_QUERY_BATCH ||
-          (response.blocks.length === 1 && response.blocks[0] === currentBlock)) {
+      if (
+        !response.blocks?.length ||
+        response.blocks.length < CHAIN_QUERY_BATCH ||
+        (response.blocks.length === 1 && response.blocks[0] === currentBlock)
+      ) {
         shouldContinue = false;
       } else {
         // Get the last (oldest) hash for the next query
@@ -146,12 +168,22 @@ export class NanoRPC {
 
     for (let i = 0; i < blocks.length; i += MAX_BLOCKS_PER_CALL) {
       const blockChunk = blocks.slice(i, i + MAX_BLOCKS_PER_CALL);
-      const response = await this.makeRPCCall<BlocksInfoResponse>('blocks_info', {
-        json_block: 'true',
-        hashes: blockChunk,
-      });
-      
+      const response = await this.makeRPCCall<BlocksInfoResponse>(
+        "blocks_info",
+        {
+          json_block: "true",
+          hashes: blockChunk,
+        },
+      );
+
       yield response;
     }
   }
-} 
+
+  public getAccountInfo(account: string): Promise<AccountInfoResponse> {
+    return this.makeRPCCall<AccountInfoResponse>("account_info", {
+      account,
+      include_confirmed: true,
+    });
+  }
+}

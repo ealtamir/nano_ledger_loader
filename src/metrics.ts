@@ -2,7 +2,9 @@ import { log } from "./logger.ts";
 
 export class CrawlerMetrics {
   private blocksProcessed = 0;
+  private blocksProcessedPerSecond = 0;
   private accountsProcessed = 0;
+  private accountsProcessedPerSecond = 0;
   private startTime: number;
   private lastReportTime: number;
   private reportIntervalMs: number;
@@ -12,22 +14,26 @@ export class CrawlerMetrics {
     this.startTime = Date.now();
     this.lastReportTime = this.startTime;
     this.reportIntervalMs = reportIntervalMs;
-    this.intervalHandler = setInterval(() => this.reportMetrics(), this.reportIntervalMs);
+    this.intervalHandler = setInterval(
+      () => this.reportMetrics(),
+      this.reportIntervalMs,
+    );
   }
 
   public addBlocks(count: number): void {
     this.blocksProcessed += count;
+    this.blocksProcessedPerSecond += count;
   }
 
   public addAccount(): void {
     this.accountsProcessed++;
+    this.accountsProcessedPerSecond++;
   }
-
 
   private reportMetrics(): void {
     const elapsedSeconds = (Date.now() - this.startTime) / 1000;
-    const blocksPerSecond = this.blocksProcessed / elapsedSeconds;
-    const accountsPerSecond = this.accountsProcessed / elapsedSeconds;
+    const blocksPerSecond = this.blocksProcessedPerSecond / elapsedSeconds;
+    const accountsPerSecond = this.accountsProcessedPerSecond / elapsedSeconds;
 
     log.info(
       `Crawler Metrics:
@@ -35,8 +41,11 @@ export class CrawlerMetrics {
       Total Accounts: ${this.accountsProcessed.toLocaleString()}
       Blocks/sec: ${blocksPerSecond.toFixed(2)}
       Accounts/sec: ${accountsPerSecond.toFixed(2)}
-      Running time: ${(elapsedSeconds / 60).toFixed(2)} minutes`
+      Running time: ${(elapsedSeconds / 60).toFixed(2)} minutes`,
     );
+
+    this.blocksProcessedPerSecond = 0;
+    this.accountsProcessedPerSecond = 0;
   }
 
   public stop(): void {
@@ -56,7 +65,10 @@ export class CrawlerMetrics {
     this.startTime = Date.now();
     this.lastReportTime = this.startTime;
     if (!this.intervalHandler) {
-      this.intervalHandler = setInterval(() => this.reportMetrics(), this.reportIntervalMs);
+      this.intervalHandler = setInterval(
+        () => this.reportMetrics(),
+        this.reportIntervalMs,
+      );
     }
   }
 }
