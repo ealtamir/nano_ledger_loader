@@ -42,7 +42,7 @@ export class CrawlerMetrics {
       Total Accounts: ${this.accountsProcessed.toLocaleString()}
       Blocks/sec: ${blocksPerSecond.toFixed(2)}
       Accounts/sec: ${accountsPerSecond.toFixed(2)}
-      Running time: ${(elapsedSeconds / 60).toFixed(2)} minutes`,
+      Running time: ${(now - this.startTime) / (60 * 1000)} minutes`,
     );
 
     this.blocksProcessedPerSecond = 0;
