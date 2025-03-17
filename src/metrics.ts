@@ -31,7 +31,8 @@ export class CrawlerMetrics {
   }
 
   private reportMetrics(): void {
-    const elapsedSeconds = (Date.now() - this.startTime) / 1000;
+    const now = Date.now();
+    const elapsedSeconds = (now - this.lastReportTime) / 1000;
     const blocksPerSecond = this.blocksProcessedPerSecond / elapsedSeconds;
     const accountsPerSecond = this.accountsProcessedPerSecond / elapsedSeconds;
 
@@ -46,6 +47,7 @@ export class CrawlerMetrics {
 
     this.blocksProcessedPerSecond = 0;
     this.accountsProcessedPerSecond = 0;
+    this.lastReportTime = now;
   }
 
   public stop(): void {
