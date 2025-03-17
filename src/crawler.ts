@@ -47,7 +47,7 @@ export class NanoCrawler {
         const insertStmt = this.db.prepare(
           "INSERT OR IGNORE INTO accounts (account, frontier) VALUES (?, ?)",
         );
-        insertStmt.run(account);
+        insertStmt.run(account, frontier);
 
         // Remove from pending_accounts
         const deleteStmt = this.db.prepare(
