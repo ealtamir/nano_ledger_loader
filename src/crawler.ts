@@ -300,11 +300,7 @@ export class NanoCrawler {
     try {
       // Get up to 50k blocks from the queue
       const stmt = this.db.prepare(`
-        SELECT bq.hash 
-        FROM blocks_queue bq
-        LEFT JOIN blocks b ON b.hash = bq.hash
-        WHERE b.hash IS NULL
-        LIMIT ${config.block_queue_select_batch_size}
+        SELECT bq.hash FROM blocks_queue bq LIMIT ${config.block_queue_select_batch_size}
       `);
       const rows = stmt.all() as Array<{ hash: string }>;
 
@@ -687,9 +683,12 @@ export class NanoCrawler {
       log.debug(`Adding ${blockHashes.length} blocks to queue`);
 
       // Use a transaction for better performance with multiple inserts
-      const insertStmt = this.db.prepare(
-        "INSERT OR IGNORE INTO blocks_queue (hash) VALUES (?)",
-      );
+      const insertStmt = this.db.prepare(`
+        INSERT OR IGNORE INTO blocks_queue (hash)
+        SELECT ? WHERE NOT EXISTS (
+          SELECT 1 FROM blocks WHERE hash = ?
+        )
+      `);
 
       const insertMany = this.db.transaction((hashes: string[]) => {
         for (const hash of hashes) {
