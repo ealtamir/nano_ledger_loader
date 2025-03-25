@@ -309,9 +309,13 @@ export class NanoCrawler {
   private async processBlocksQueue(): Promise<void> {
     try {
       // Get up to 50k blocks from the queue
-      const stmt = this.db.prepare(
-        `SELECT hash FROM blocks_queue LIMIT ${config.block_queue_select_batch_size}`,
-      );
+      const stmt = this.db.prepare(`
+        SELECT bq.hash 
+        FROM blocks_queue bq
+        LEFT JOIN blocks b ON b.hash = bq.hash
+        WHERE b.hash IS NULL
+        LIMIT ${config.block_queue_select_batch_size}
+      `);
       const rows = await stmt.all() as Array<{ hash: string }>;
 
       if (rows.length === 0) {
@@ -685,17 +689,13 @@ export class NanoCrawler {
       log.debug(`Adding ${blockHashes.length} blocks to queue`);
 
       // Use a transaction for better performance with multiple inserts
-      const insertStmt = this.db.prepare(`
-        INSERT OR IGNORE INTO blocks_queue (hash)
-        SELECT ? AS hash
-        WHERE NOT EXISTS (
-          SELECT 1 FROM blocks WHERE hash = ?
-        )
-      `);
+      const insertStmt = this.db.prepare(
+        "INSERT OR IGNORE INTO blocks_queue (hash) VALUES (?)",
+      );
 
       const insertMany = this.db.transaction((hashes: string[]) => {
         for (const hash of hashes) {
-          insertStmt.run(hash, hash); // Need to pass hash twice for the two ? placeholders
+          insertStmt.run(hash);
         }
       });
 
