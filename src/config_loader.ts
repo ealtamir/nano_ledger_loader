@@ -15,6 +15,7 @@ const ConfigSchema = z.object({
   identify_new_blocks: z.boolean().default(true),
   indexes_enabled: z.boolean().default(false),
   block_insert_batch_size: z.number().default(50),
+  block_queue_select_batch_size: z.number().default(10_000),
 });
 
 // Create a type from the schema

@@ -25,9 +25,9 @@ export class CrawlerMetrics {
     this.blocksProcessedPerSecond += count;
   }
 
-  public addAccount(): void {
-    this.accountsProcessed++;
-    this.accountsProcessedPerSecond++;
+  public addAccount(count: number = 1): void {
+    this.accountsProcessed += count;
+    this.accountsProcessedPerSecond += count;
   }
 
   private reportMetrics(): void {

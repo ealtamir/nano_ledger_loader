@@ -57,7 +57,7 @@ export class NanoCrawler {
       });
 
       // Execute the transaction
-      transaction(account);
+      await transaction(account);
     } catch (error) {
       log.error(
         `Failed to save account ${account}: ${
@@ -167,7 +167,7 @@ export class NanoCrawler {
             Math.min(i + batchSize, values.length)
           } of ${values.length})`,
         );
-        insertBatch(batch);
+        await insertBatch(batch);
       }
       stmt.finalize();
 
@@ -203,11 +203,19 @@ export class NanoCrawler {
     }
   }
 
-  private async removeFromPendingAccounts(account: string): Promise<void> {
+  private async removeFromPendingAccounts(
+    account: string | string[],
+  ): Promise<void> {
     const stmt = this.db.prepare(
       "DELETE FROM pending_accounts WHERE account = ?",
     );
-    stmt.run(account);
+    if (Array.isArray(account)) {
+      for (const acc of account) {
+        await stmt.run(acc);
+      }
+    } else {
+      await stmt.run(account);
+    }
   }
 
   private async removeAccounts(accounts: string[]): Promise<void> {
@@ -223,7 +231,7 @@ export class NanoCrawler {
         }
       });
 
-      transaction(accounts);
+      await transaction(accounts);
     } catch (error) {
       log.error(
         `Failed to remove accounts: ${
@@ -301,8 +309,10 @@ export class NanoCrawler {
   private async processBlocksQueue(): Promise<void> {
     try {
       // Get up to 50k blocks from the queue
-      const stmt = this.db.prepare("SELECT hash FROM blocks_queue LIMIT 50000");
-      const rows = stmt.all() as Array<{ hash: string }>;
+      const stmt = this.db.prepare(
+        `SELECT hash FROM blocks_queue LIMIT ${config.block_queue_select_batch_size}`,
+      );
+      const rows = await stmt.all() as Array<{ hash: string }>;
 
       if (rows.length === 0) {
         // No blocks to process, schedule next run
@@ -333,7 +343,6 @@ export class NanoCrawler {
           await this.saveBlocks(blocksInfoResponse.blocks);
 
           // Update metrics
-          this.metrics.addBlocks(Object.keys(blocksInfoResponse.blocks).length);
 
           for (const info of Object.values(blocksInfoResponse.blocks)) {
             if (!this.shouldContinue) {
@@ -412,11 +421,16 @@ export class NanoCrawler {
       let latestBlockHash = "";
 
       // Process blocks as they come in from the chain
+      let first_batch = true;
       for await (
         const blockBatch of this.rpc.getSuccessorsGenerator(
           frontier,
         )
       ) {
+        if (first_batch) {
+          blockBatch.shift();
+          first_batch = false;
+        }
         latestBlockHash = blockBatch[blockBatch.length - 1];
         totalBlocks += blockBatch.length;
         if (!this.shouldContinue) {
@@ -566,9 +580,10 @@ export class NanoCrawler {
       const accountsToRemove = accounts.filter((account) =>
         !(account in accountFrontiers)
       );
-      for (const account of accountsToRemove) {
-        await this.removeFromPendingAccounts(account);
-        this.metrics.addAccount();
+
+      if (accountsToRemove.length > 0) {
+        await this.removeFromPendingAccounts(accountsToRemove);
+        this.metrics.addAccount(accountsToRemove.length);
       }
 
       // Process each account sequentially
@@ -670,18 +685,22 @@ export class NanoCrawler {
       log.debug(`Adding ${blockHashes.length} blocks to queue`);
 
       // Use a transaction for better performance with multiple inserts
-      const insertStmt = this.db.prepare(
-        "INSERT OR IGNORE INTO blocks_queue (hash) VALUES (?)",
-      );
+      const insertStmt = this.db.prepare(`
+        INSERT OR IGNORE INTO blocks_queue (hash)
+        SELECT ? AS hash
+        WHERE NOT EXISTS (
+          SELECT 1 FROM blocks WHERE hash = ?
+        )
+      `);
 
       const insertMany = this.db.transaction((hashes: string[]) => {
         for (const hash of hashes) {
-          insertStmt.run(hash);
+          insertStmt.run(hash, hash); // Need to pass hash twice for the two ? placeholders
         }
       });
 
       // Execute the transaction with all block hashes
-      insertMany(blockHashes);
+      await insertMany(blockHashes);
 
       log.debug(`Successfully added ${blockHashes.length} blocks to queue`);
     } catch (error) {

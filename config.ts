@@ -21,6 +21,8 @@ export const config = {
   // How many blocks to insert at a time
   block_insert_batch_size: 57,
 
+  block_queue_select_batch_size: 10_000,
+
   // How many accounts are retrieved from the pending queue at a time
   // this is different to how many accounts are retrieved from the DB
   // to populate the pending queue
