@@ -331,7 +331,6 @@ export class NanoCrawler {
         ) {
           // Save blocks to database
           this.saveBlocks(blocksInfoResponse.blocks);
-          this.metrics.addBlocks(batchHashes.length);
 
           // Update metrics
 
@@ -373,6 +372,7 @@ export class NanoCrawler {
 
             // Execute the transaction for this batch
             deleteBatch(batchHashes);
+            this.metrics.addBlocks(batchHashes.length);
 
             log.debug(
               `Deleted batch of ${batchHashes.length} blocks from queue (${
