@@ -331,6 +331,7 @@ export class NanoCrawler {
         ) {
           // Save blocks to database
           this.saveBlocks(blocksInfoResponse.blocks);
+          this.metrics.addBlocks(batchHashes.length);
 
           // Update metrics
 
