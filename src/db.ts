@@ -10,7 +10,7 @@ export function initializeDatabase(): Database {
 
   // By default, 'fileMustExist: false' means the file will be created if it doesn't exist.
   // If you specifically need to create only if not existing, you can adjust the options as needed.
-  db = new Database("./nano.db");
+  db = new Database("./nano.db", { unsafeConcurrency: true });
   // Executing pragma statements
   db.exec("pragma journal_mode = WAL"); // WAL mode for better concurrency and write performance
   db.exec("pragma synchronous = NORMAL"); // Balance durability and performance

@@ -22,10 +22,7 @@ export class NanoCrawler {
     this.processBlocksQueue();
   }
 
-  private async isAccountProcessed(
-    account: string,
-    frontier: string,
-  ): Promise<string> {
+  private isAccountProcessed(account: string, frontier: string): string {
     // better-sqlite3: use .get(...) to fetch a single row
     const stmt = this.db.prepare(
       "SELECT * FROM accounts WHERE account = ?",
@@ -39,7 +36,7 @@ export class NanoCrawler {
     return "";
   }
 
-  private async saveAccount(account: string, frontier: string): Promise<void> {
+  private saveAccount(account: string, frontier: string): void {
     try {
       // Create a transaction for both operations
       const transaction = this.db.transaction((account: string) => {
@@ -57,7 +54,7 @@ export class NanoCrawler {
       });
 
       // Execute the transaction
-      await transaction(account);
+      transaction(account);
     } catch (error) {
       log.error(
         `Failed to save account ${account}: ${
@@ -68,9 +65,7 @@ export class NanoCrawler {
     }
   }
 
-  private async saveBlocks(
-    blocks: { [key: string]: BlockInfo },
-  ): Promise<void> {
+  private saveBlocks(blocks: { [key: string]: BlockInfo }): void {
     if (Object.keys(blocks).length === 0) return;
 
     // Build values array for all blocks
@@ -167,7 +162,7 @@ export class NanoCrawler {
             Math.min(i + batchSize, values.length)
           } of ${values.length})`,
         );
-        await insertBatch(batch);
+        insertBatch(batch);
       }
       stmt.finalize();
 
@@ -184,10 +179,10 @@ export class NanoCrawler {
     }
   }
 
-  private async addToPendingAccounts(
+  private addToPendingAccounts(
     account: string,
     nodeWebsocket: boolean = false,
-  ): Promise<void> {
+  ): void {
     try {
       const insertStmt = this.db.prepare(
         "INSERT OR IGNORE INTO pending_accounts (account) VALUES (?)",
@@ -203,22 +198,20 @@ export class NanoCrawler {
     }
   }
 
-  private async removeFromPendingAccounts(
-    account: string | string[],
-  ): Promise<void> {
+  private removeFromPendingAccounts(account: string | string[]): void {
     const stmt = this.db.prepare(
       "DELETE FROM pending_accounts WHERE account = ?",
     );
     if (Array.isArray(account)) {
       for (const acc of account) {
-        await stmt.run(acc);
+        stmt.run(acc);
       }
     } else {
-      await stmt.run(account);
+      stmt.run(account);
     }
   }
 
-  private async removeAccounts(accounts: string[]): Promise<void> {
+  private removeAccounts(accounts: string[]): void {
     // Skip if no accounts to remove
     if (accounts.length === 0) return;
 
@@ -231,7 +224,7 @@ export class NanoCrawler {
         }
       });
 
-      await transaction(accounts);
+      transaction(accounts);
     } catch (error) {
       log.error(
         `Failed to remove accounts: ${
@@ -242,7 +235,7 @@ export class NanoCrawler {
     }
   }
 
-  private async loadPendingAccounts(batchSize: number = -1): Promise<string[]> {
+  private loadPendingAccounts(batchSize: number = -1): string[] {
     if (batchSize === -1) {
       batchSize = config.pending_accounts_batch_size;
     }
@@ -253,15 +246,12 @@ export class NanoCrawler {
     return rows.map((row) => row.account);
   }
 
-  public async queueAccount(
-    account: string,
-    nodeWebsocket: boolean = false,
-  ): Promise<void> {
+  public queueAccount(account: string, nodeWebsocket: boolean = false): void {
     // this.accountQueue.push(account);
-    await this.addToPendingAccounts(account, nodeWebsocket);
+    this.addToPendingAccounts(account, nodeWebsocket);
   }
 
-  private async getNewBlocks(allBlocks: string[]): Promise<string[]> {
+  private getNewBlocks(allBlocks: string[]): string[] {
     if (allBlocks.length === 0) return [];
 
     if (!config.identify_new_blocks) {
@@ -282,7 +272,7 @@ export class NanoCrawler {
           WHERE hash IN (${chunk.map(() => "?").join(",")})
         `;
         const stmt = this.db.prepare(query);
-        const existingBlocksChunk = await stmt.all(chunk) as Array<
+        const existingBlocksChunk = stmt.all(chunk) as Array<
           { hash: string }
         >;
 
@@ -316,7 +306,7 @@ export class NanoCrawler {
         WHERE b.hash IS NULL
         LIMIT ${config.block_queue_select_batch_size}
       `);
-      const rows = await stmt.all() as Array<{ hash: string }>;
+      const rows = stmt.all() as Array<{ hash: string }>;
 
       if (rows.length === 0) {
         // No blocks to process, schedule next run
@@ -344,7 +334,7 @@ export class NanoCrawler {
           const blocksInfoResponse of this.rpc.getBlocksInfo(batchHashes)
         ) {
           // Save blocks to database
-          await this.saveBlocks(blocksInfoResponse.blocks);
+          this.saveBlocks(blocksInfoResponse.blocks);
 
           // Update metrics
 
@@ -358,7 +348,7 @@ export class NanoCrawler {
             const newAddress = info.contents.link_as_account ||
               info.contents.destination;
             if (newAddress) {
-              await this.queueAccount(newAddress);
+              this.queueAccount(newAddress);
             }
           }
 
@@ -385,7 +375,7 @@ export class NanoCrawler {
             });
 
             // Execute the transaction for this batch
-            await deleteBatch(batchHashes);
+            deleteBatch(batchHashes);
 
             log.debug(
               `Deleted batch of ${batchHashes.length} blocks from queue (${
@@ -445,7 +435,7 @@ export class NanoCrawler {
         }
 
         // Add blocks to queue for processing
-        await this.addBlocksToQueue(blockBatch);
+        this.addBlocksToQueue(blockBatch);
       }
 
       if (totalBlocks === 0) {
@@ -454,7 +444,7 @@ export class NanoCrawler {
 
       // Mark account as processed and remove from pending
       if (this.shouldContinue) {
-        await this.saveAccount(account, latestBlockHash);
+        this.saveAccount(account, latestBlockHash);
         this.metrics.addAccount();
       }
     } catch (error: unknown) {
@@ -586,7 +576,7 @@ export class NanoCrawler {
       );
 
       if (accountsToRemove.length > 0) {
-        await this.removeFromPendingAccounts(accountsToRemove);
+        this.removeFromPendingAccounts(accountsToRemove);
         this.metrics.addAccount(accountsToRemove.length);
       }
 
@@ -604,13 +594,13 @@ export class NanoCrawler {
           await this.processAccount(account, frontier);
         } catch (error) {
           log.error(`Error processing account ${account}: ${error}`);
-          await this.queueAccount(account);
+          this.queueAccount(account);
         }
       }
     } catch (error) {
       log.error(`Batch processing failed: ${error}`);
       for (const account of accounts) {
-        await this.queueAccount(account);
+        this.queueAccount(account);
       }
     }
   }
@@ -651,7 +641,7 @@ export class NanoCrawler {
         }
 
         // When queue is empty, check pending_accounts
-        const pendingAccounts = await this.loadPendingAccounts();
+        const pendingAccounts = this.loadPendingAccounts();
         if (pendingAccounts.length === 0) {
           log.info(
             "No more pending accounts to process. Waiting for new blocks...",
@@ -682,7 +672,7 @@ export class NanoCrawler {
     log.info("Crawler stopped.");
   }
 
-  private async addBlocksToQueue(blockHashes: string[]): Promise<void> {
+  private addBlocksToQueue(blockHashes: string[]): void {
     if (blockHashes.length === 0) return;
 
     try {
@@ -700,7 +690,7 @@ export class NanoCrawler {
       });
 
       // Execute the transaction with all block hashes
-      await insertMany(blockHashes);
+      insertMany(blockHashes);
 
       log.debug(`Successfully added ${blockHashes.length} blocks to queue`);
     } catch (error) {
