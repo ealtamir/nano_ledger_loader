@@ -570,6 +570,11 @@ export class NanoCrawler {
       // Get accounts that need processing with their frontiers
       const accountFrontiers = await this.getAccountsToProcess(accounts);
 
+      if (Object.keys(accountFrontiers).length === 0) {
+        this.metrics.addAccount(accounts.length);
+        return;
+      }
+
       // Remove accounts that don't need processing from pending
       const accountsToRemove = accounts.filter((account) =>
         !(account in accountFrontiers)
@@ -633,7 +638,10 @@ export class NanoCrawler {
       while (this.shouldContinue) {
         while (this.shouldContinue && this.accountQueue.length > 0) {
           // Process up to 100 accounts at a time
-          const batch = this.accountQueue.splice(0, 100);
+          const batch = this.accountQueue.splice(
+            0,
+            config.account_processing_batch_size,
+          );
           await this.processBatch(batch);
         }
         if (!this.shouldContinue) {
