@@ -19,7 +19,10 @@ export class NanoCrawler {
     this.db = db;
     this.metrics = new CrawlerMetrics(1000 * 30); // Print logs every 30 seconds
     this.shouldContinue = true;
+
+    log.info("Processing blocks queue...");
     this.processBlocksQueue();
+
     this.parseLedger();
   }
 
@@ -380,7 +383,6 @@ export class NanoCrawler {
   }
 
   private async processBlocksQueue(): Promise<void> {
-    log.info("Processing blocks queue...");
     try {
       // Get up to 50k blocks from the queue
       let rows: Array<{ hash: string }>;
