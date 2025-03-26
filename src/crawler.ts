@@ -36,6 +36,7 @@ export class NanoCrawler {
     return "";
   }
   private async parseLedger(): Promise<void> {
+    log.info("Starting ledger parsing...");
     if (!this.shouldContinue) return;
 
     try {
@@ -272,14 +273,18 @@ export class NanoCrawler {
   }
 
   private removeFromPendingAccounts(account: string | string[]): void {
-    const stmt = this.db.prepare(
-      "DELETE FROM pending_accounts WHERE account = ?",
-    );
     if (Array.isArray(account)) {
-      for (const acc of account) {
-        stmt.run(acc);
-      }
+      // Process array in a batch
+      const placeholders = account.map(() => "?").join(",");
+      const stmt = this.db.prepare(
+        `DELETE FROM pending_accounts WHERE account IN (${placeholders})`,
+      );
+      stmt.run(...account);
     } else {
+      // Single account deletion
+      const stmt = this.db.prepare(
+        "DELETE FROM pending_accounts WHERE account = ?",
+      );
       stmt.run(account);
     }
   }
@@ -375,6 +380,7 @@ export class NanoCrawler {
   }
 
   private async processBlocksQueue(): Promise<void> {
+    log.info("Processing blocks queue...");
     try {
       // Get up to 50k blocks from the queue
       let rows: Array<{ hash: string }>;
@@ -654,6 +660,7 @@ export class NanoCrawler {
       const accountFrontiers = await this.getAccountsToProcess(accounts);
 
       if (Object.keys(accountFrontiers).length === 0) {
+        this.removeFromPendingAccounts(accounts);
         this.metrics.addAccount(accounts.length);
         return;
       }
