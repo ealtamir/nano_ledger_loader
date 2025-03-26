@@ -16,6 +16,9 @@ const ConfigSchema = z.object({
   indexes_enabled: z.boolean().default(false),
   block_insert_batch_size: z.number().default(50),
   block_queue_select_batch_size: z.number().default(10_000),
+  ledger_parse_batch_size: z.number().default(1_000),
+  ledger_parse_interval: z.number().default(60_000),
+  genesis_account: z.string(),
 });
 
 // Create a type from the schema

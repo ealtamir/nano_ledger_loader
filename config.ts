@@ -34,6 +34,12 @@ export const config = {
   // Maximum number of retries for RPC calls
   rpc_call_max_retries: 3,
 
+  // How many accounts to pull from the ledger at a time
+  ledger_parse_batch_size: 1_000,
+  ledger_parse_interval: 60_000,
+  genesis_account:
+    "nano_3t6k35gi95xu6tergt6p69ck76ogmitsa8mnijtpxm9fkcm736xtoncuohr3",
+
   // Whether to identify new blocks
   identify_new_blocks: false,
   indexes_enabled: false,
