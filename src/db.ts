@@ -129,15 +129,8 @@ export function getCurrentLedgerPosition(genesisAccount: string): string {
 export function updateLedgerPosition(account: string): void {
   const database = getDatabase();
 
-  // First try to update the existing row
-  const updateResult = database.prepare(
-    "UPDATE ledger_positions SET account = ? WHERE id = 1",
+  // Single statement using INSERT OR REPLACE (UPSERT)
+  database.prepare(
+    "INSERT OR REPLACE INTO ledger_positions (id, account) VALUES (1, ?)",
   ).run(account);
-
-  // If no row was updated, insert a new one
-  if (updateResult.changes === 0) {
-    database.prepare(
-      "INSERT INTO ledger_positions (id, account) VALUES (1, ?)",
-    ).run(account);
-  }
 }

@@ -660,23 +660,25 @@ export class NanoCrawler {
   private async processBatch(accounts: string[]): Promise<void> {
     try {
       // Get accounts that need processing with their frontiers
-      const accountFrontiers = await this.getAccountsToProcess(accounts);
+      // const accountFrontiers = await this.getAccountsToProcess(accounts);
 
-      if (Object.keys(accountFrontiers).length === 0) {
-        this.removeFromPendingAccounts(accounts);
-        this.metrics.addAccount(accounts.length);
-        return;
-      }
+      const accountFrontiers = this.getFrontiers(accounts);
+
+      // if (Object.keys(accountFrontiers).length === 0) {
+      //   this.removeFromPendingAccounts(accounts);
+      //   this.metrics.addAccount(accounts.length);
+      //   return;
+      // }
 
       // Remove accounts that don't need processing from pending
-      const accountsToRemove = accounts.filter((account) =>
-        !(account in accountFrontiers)
-      );
+      // const accountsToRemove = accounts.filter((account) =>
+      //   !(account in accountFrontiers)
+      // );
 
-      if (accountsToRemove.length > 0) {
-        this.removeFromPendingAccounts(accountsToRemove);
-        this.metrics.addAccount(accountsToRemove.length);
-      }
+      // if (accountsToRemove.length > 0) {
+      //   this.removeFromPendingAccounts(accountsToRemove);
+      //   this.metrics.addAccount(accountsToRemove.length);
+      // }
 
       // Process each account sequentially
       for (const [account, frontier] of Object.entries(accountFrontiers)) {
