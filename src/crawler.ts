@@ -94,7 +94,7 @@ export class NanoCrawler {
           } chain accounts to process`,
         );
 
-        for (const account of Object.keys(accountsToRemove)) {
+        for (const account of Object.keys(ledgerAccounts.accounts)) {
           if (!this.shouldContinue) {
             return;
           }
