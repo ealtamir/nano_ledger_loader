@@ -121,18 +121,46 @@ export class NanoRPC {
   }
 
   async *getSuccessorsGenerator(
-    block: string,
+    block: string | undefined,
     count: number = -1,
+    account: string | undefined,
   ): AsyncGenerator<string[]> {
-    const CHAIN_QUERY_BATCH = config.chain_query_batch_size;
+    log.debug(
+      `Starting getSuccessorsGenerator with block: ${block}, count: ${count}, account: ${account}`,
+    );
+
     let currentBlock = block;
+    if (!currentBlock && account) {
+      log.debug(
+        `No block provided, fetching frontier block for account: ${account}`,
+      );
+      try {
+        const accountInfo = await this.getAccountInfo(account);
+        currentBlock = accountInfo.open_block;
+        log.debug(`Using frontier block: ${currentBlock}`);
+      } catch (error) {
+        log.error(`Failed to fetch account info: ${error}`);
+        throw new Error(`Failed to fetch account info: ${error}`);
+      }
+    }
+
+    if (!currentBlock) {
+      throw new Error(
+        "No block provided and no account specified to fetch frontier block",
+      );
+    }
+
+    const CHAIN_QUERY_BATCH = config.chain_query_batch_size;
     let shouldContinue = true;
 
     while (shouldContinue) {
-      const response = await this.makeRPCCall<ChainResponse>("successors", {
-        block: currentBlock,
-        count: count === -1 ? CHAIN_QUERY_BATCH : count,
-      });
+      const response: ChainResponse = await this.makeRPCCall<ChainResponse>(
+        "successors",
+        {
+          block: currentBlock,
+          count: count === -1 ? CHAIN_QUERY_BATCH : count,
+        },
+      );
 
       // If this is a single query (count !== -1), yield and return
       if (count !== -1) {
