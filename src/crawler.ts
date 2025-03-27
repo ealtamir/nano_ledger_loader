@@ -65,6 +65,17 @@ export class NanoCrawler {
           throw new Error(ledgerAccounts.error);
         }
 
+        const accountFrontiers = this.getFrontiers(
+          Object.keys(ledgerAccounts.accounts),
+        );
+
+        const accountsToRemove = Object.keys(ledgerAccounts.accounts).filter(
+          (account) => !(account in accountFrontiers),
+        ).reduce((acc, account) => {
+          acc[account] = "";
+          return acc;
+        }, {} as Record<string, string>);
+
         if (Object.keys(ledgerAccounts).length === 0) {
           log.debug("Reached end of ledger, starting over");
           lastProcessedAccount = config.genesis_account;
@@ -76,34 +87,20 @@ export class NanoCrawler {
           continue;
         }
 
-        // Process each account in the batch
-        for (const [account, info] of Object.entries(ledgerAccounts.accounts)) {
-          if (!this.shouldContinue) break;
+        log.debug(
+          `Found ${
+            Object.keys(ledgerAccounts.accounts).length
+          } chain accounts to process`,
+        );
 
-          try {
-            // Check if account needs processing
-            const currentFrontier = this.isAccountProcessed(
-              account,
-              info.frontier,
-            );
-
-            if (currentFrontier !== info.frontier) {
-              log.debug(`Found unprocessed account in ledger: ${account}`);
-              this.queueAccount(account);
-            }
-
-            lastProcessedAccount = account;
-            // Update the ledger position in the database after processing each account
-            // This ensures we don't lose progress if the process is interrupted
-            updateLedgerPosition(lastProcessedAccount);
-          } catch (error) {
-            log.error(
-              `Error processing ledger account ${account}: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-            );
+        for (const account of Object.keys(accountsToRemove)) {
+          if (!this.shouldContinue) {
+            return;
+          }
+          if (account in accountsToRemove) {
             continue;
           }
+          this.queueAccount(account);
         }
 
         // Add small delay between batches to prevent overwhelming the node
@@ -660,25 +657,24 @@ export class NanoCrawler {
   private async processBatch(accounts: string[]): Promise<void> {
     try {
       // Get accounts that need processing with their frontiers
-      // const accountFrontiers = await this.getAccountsToProcess(accounts);
+      const accountFrontiers = await this.getAccountsToProcess(accounts);
 
-      const accountFrontiers = this.getFrontiers(accounts);
+      // const accountFrontiers = this.getFrontiers(accounts);
 
-      // if (Object.keys(accountFrontiers).length === 0) {
-      //   this.removeFromPendingAccounts(accounts);
-      //   this.metrics.addAccount(accounts.length);
-      //   return;
-      // }
+      if (Object.keys(accountFrontiers).length === 0) {
+        this.removeFromPendingAccounts(accounts);
+        this.metrics.addAccount(accounts.length);
+        return;
+      }
 
-      // Remove accounts that don't need processing from pending
-      // const accountsToRemove = accounts.filter((account) =>
-      //   !(account in accountFrontiers)
-      // );
+      const accountsToRemove = accounts.filter((account) =>
+        !(account in accountFrontiers)
+      );
 
-      // if (accountsToRemove.length > 0) {
-      //   this.removeFromPendingAccounts(accountsToRemove);
-      //   this.metrics.addAccount(accountsToRemove.length);
-      // }
+      if (accountsToRemove.length > 0) {
+        this.removeFromPendingAccounts(accountsToRemove);
+        this.metrics.addAccount(accountsToRemove.length);
+      }
 
       // Process each account sequentially
       for (const [account, frontier] of Object.entries(accountFrontiers)) {
@@ -692,6 +688,8 @@ export class NanoCrawler {
         try {
           log.debug(`Processing ${account}`);
           await this.processAccount(account, frontier);
+          this.removeFromPendingAccounts(account);
+          this.metrics.addAccount();
         } catch (error) {
           log.error(`Error processing account ${account}: ${error}`);
           this.queueAccount(account);
