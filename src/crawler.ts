@@ -89,7 +89,8 @@ export class NanoCrawler {
 
         log.debug(
           `Found ${
-            Object.keys(ledgerAccounts.accounts).length
+            Object.keys(ledgerAccounts.accounts).length -
+            Object.keys(accountsToRemove).length
           } chain accounts to process`,
         );
 
