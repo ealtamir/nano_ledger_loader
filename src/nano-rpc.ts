@@ -136,6 +136,10 @@ export class NanoRPC {
       );
       try {
         const accountInfo = await this.getAccountInfo(account);
+        if (accountInfo.error) {
+          yield [];
+          return;
+        }
         currentBlock = accountInfo.open_block;
         log.debug(`Using frontier block: ${currentBlock}`);
       } catch (error) {

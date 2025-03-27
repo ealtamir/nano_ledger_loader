@@ -506,7 +506,6 @@ export class NanoCrawler {
       let latestBlockHash = "";
 
       // Process blocks as they come in from the chain
-      let first_batch = true;
       for await (
         const blockBatch of this.rpc.getSuccessorsGenerator(
           frontier,
@@ -514,9 +513,9 @@ export class NanoCrawler {
           account,
         )
       ) {
-        if (first_batch) {
-          blockBatch.shift();
-          first_batch = false;
+        if (blockBatch.length === 0) {
+          log.debug(`No blocks found for account ${account}`);
+          return;
         }
         latestBlockHash = blockBatch[blockBatch.length - 1];
         totalBlocks += blockBatch.length;
