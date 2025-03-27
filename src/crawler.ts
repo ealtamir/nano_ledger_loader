@@ -5,6 +5,7 @@ import { Database } from "jsr:@db/sqlite@0.12";
 import { CrawlerMetrics } from "./metrics.ts";
 import { config } from "./config_loader.ts";
 import { Logger } from "jsr:@std/log/get-logger";
+import { getCurrentLedgerPosition, updateLedgerPosition } from "./db.ts";
 export class NanoCrawler {
   private rpc: NanoRPC;
   private accountQueue: string[];
@@ -44,7 +45,12 @@ export class NanoCrawler {
 
     try {
       const BATCH_SIZE = config.ledger_parse_batch_size || 1000;
-      let lastProcessedAccount = config.genesis_account;
+
+      // Get the last processed account from the database, or use genesis if none exists
+      let lastProcessedAccount = getCurrentLedgerPosition(
+        config.genesis_account,
+      );
+      log.info(`Starting ledger parsing from account: ${lastProcessedAccount}`);
 
       while (this.shouldContinue) {
         // Get batch of accounts from ledger
@@ -52,10 +58,18 @@ export class NanoCrawler {
           lastProcessedAccount,
           BATCH_SIZE,
         );
+        if (ledgerAccounts.error) {
+          log.error(
+            `Error getting ledger accounts: ${ledgerAccounts.error} with account ${lastProcessedAccount}`,
+          );
+          throw new Error(ledgerAccounts.error);
+        }
 
         if (Object.keys(ledgerAccounts).length === 0) {
           log.debug("Reached end of ledger, starting over");
           lastProcessedAccount = config.genesis_account;
+          // Update the ledger position in the database when starting over
+          updateLedgerPosition(lastProcessedAccount);
           await new Promise((resolve) =>
             setTimeout(resolve, config.ledger_parse_interval || 60000)
           );
@@ -63,7 +77,7 @@ export class NanoCrawler {
         }
 
         // Process each account in the batch
-        for (const [account, info] of Object.entries(ledgerAccounts)) {
+        for (const [account, info] of Object.entries(ledgerAccounts.accounts)) {
           if (!this.shouldContinue) break;
 
           try {
@@ -79,6 +93,9 @@ export class NanoCrawler {
             }
 
             lastProcessedAccount = account;
+            // Update the ledger position in the database after processing each account
+            // This ensures we don't lose progress if the process is interrupted
+            updateLedgerPosition(lastProcessedAccount);
           } catch (error) {
             log.error(
               `Error processing ledger account ${account}: ${
@@ -113,20 +130,16 @@ export class NanoCrawler {
       // Create a transaction for both operations
       const transaction = this.db.transaction((account: string) => {
         // Replace INSERT OR IGNORE with INSERT OR REPLACE to perform an upsert
-        {
-          using insertStmt = this.db.prepare(
-            "INSERT OR REPLACE INTO accounts (account, frontier) VALUES (?, ?)",
-          );
-          insertStmt.run(account, frontier);
-        }
+        const insertStmt = this.db.prepare(
+          "INSERT OR REPLACE INTO accounts (account, frontier) VALUES (?, ?)",
+        );
+        insertStmt.run(account, frontier);
 
         // Remove from pending_accounts
-        {
-          using deleteStmt = this.db.prepare(
-            "DELETE FROM pending_accounts WHERE account = ?",
-          );
-          deleteStmt.run(account);
-        }
+        const deleteStmt = this.db.prepare(
+          "DELETE FROM pending_accounts WHERE account = ?",
+        );
+        deleteStmt.run(account);
       });
 
       // Execute the transaction
@@ -221,26 +234,24 @@ export class NanoCrawler {
       const batchSize = config.block_insert_batch_size || 50;
 
       // Process in batches to avoid SQLite parameter limit
-      {
-        using stmt = this.db.prepare(query);
+      const stmt = this.db.prepare(query);
 
-        // Use a transaction for better performance
-        const insertBatch = this.db.transaction((batch: any[]) => {
-          for (const row of batch) {
-            stmt.run(...row);
-          }
-        });
-
-        // Process all values in batches
-        for (let i = 0; i < values.length; i += batchSize) {
-          const batch = values.slice(i, i + batchSize);
-          log.debug(
-            `Inserting batch of ${batch.length} blocks (${i + 1}-${
-              Math.min(i + batchSize, values.length)
-            } of ${values.length})`,
-          );
-          insertBatch(batch);
+      // Use a transaction for better performance
+      const insertBatch = this.db.transaction((batch: any[]) => {
+        for (const row of batch) {
+          stmt.run(...row);
         }
+      });
+
+      // Process all values in batches
+      for (let i = 0; i < values.length; i += batchSize) {
+        const batch = values.slice(i, i + batchSize);
+        log.debug(
+          `Inserting batch of ${batch.length} blocks (${i + 1}-${
+            Math.min(i + batchSize, values.length)
+          } of ${values.length})`,
+        );
+        insertBatch(batch);
       }
 
       log.debug(
@@ -299,13 +310,11 @@ export class NanoCrawler {
     try {
       // Create and execute transaction
       const transaction = this.db.transaction((accounts: string[]) => {
-        {
-          using stmt = this.db.prepare(
-            "DELETE FROM accounts WHERE account = ?",
-          );
-          for (const account of accounts) {
-            stmt.run(account);
-          }
+        const stmt = this.db.prepare(
+          "DELETE FROM accounts WHERE account = ?",
+        );
+        for (const account of accounts) {
+          stmt.run(account);
         }
       });
 
@@ -356,13 +365,11 @@ export class NanoCrawler {
           SELECT hash FROM blocks 
           WHERE hash IN (${chunk.map(() => "?").join(",")})
         `;
-        {
-          using stmt = this.db.prepare(query);
-          const existingBlocksChunk = stmt.all(...chunk) as Array<
-            { hash: string }
-          >;
-          existingBlocksChunk.forEach((row) => existingBlocksSet.add(row.hash));
-        }
+        const stmt = this.db.prepare(query);
+        const existingBlocksChunk = stmt.all(...chunk) as Array<
+          { hash: string }
+        >;
+        existingBlocksChunk.forEach((row) => existingBlocksSet.add(row.hash));
       }
 
       const newBlocks = allBlocks.filter((hash) =>
@@ -386,12 +393,10 @@ export class NanoCrawler {
     try {
       // Get up to 50k blocks from the queue
       let rows: Array<{ hash: string }>;
-      {
-        using stmt = this.db.prepare(`
-          SELECT bq.hash FROM blocks_queue bq LIMIT ${config.block_queue_select_batch_size}
-        `);
-        rows = stmt.all() as Array<{ hash: string }>;
-      }
+      const stmt = this.db.prepare(
+        `SELECT bq.hash FROM blocks_queue bq LIMIT ${config.block_queue_select_batch_size}`,
+      );
+      rows = stmt.all() as Array<{ hash: string }>;
 
       if (rows.length === 0) {
         // No blocks to process, schedule next run
@@ -438,43 +443,41 @@ export class NanoCrawler {
           }
 
           // Remove processed blocks from queue in batches to respect SQLite limits
-          {
-            using deleteStmt = this.db.prepare(
-              "DELETE FROM blocks_queue WHERE hash = ?",
+          const deleteStmt = this.db.prepare(
+            "DELETE FROM blocks_queue WHERE hash = ?",
+          );
+
+          // Get the block hashes to delete
+          const hashesToDelete = Object.keys(blocksInfoResponse.blocks);
+
+          // Use a batch size of 999 to stay under SQLite's parameter limit
+          const DELETE_BATCH_SIZE = 999;
+
+          // Process deletions in batches
+          for (let i = 0; i < hashesToDelete.length; i += DELETE_BATCH_SIZE) {
+            const batchHashes = hashesToDelete.slice(
+              i,
+              i + DELETE_BATCH_SIZE,
             );
 
-            // Get the block hashes to delete
-            const hashesToDelete = Object.keys(blocksInfoResponse.blocks);
+            // Use a transaction for each batch for better performance
+            const deleteBatch = this.db.transaction((hashes: string[]) => {
+              for (const hash of hashes) {
+                deleteStmt.run(hash);
+              }
+            });
 
-            // Use a batch size of 999 to stay under SQLite's parameter limit
-            const DELETE_BATCH_SIZE = 999;
+            // Execute the transaction for this batch
+            deleteBatch(batchHashes);
+            this.metrics.addBlocks(batchHashes.length);
 
-            // Process deletions in batches
-            for (let i = 0; i < hashesToDelete.length; i += DELETE_BATCH_SIZE) {
-              const batchHashes = hashesToDelete.slice(
-                i,
-                i + DELETE_BATCH_SIZE,
-              );
-
-              // Use a transaction for each batch for better performance
-              const deleteBatch = this.db.transaction((hashes: string[]) => {
-                for (const hash of hashes) {
-                  deleteStmt.run(hash);
-                }
-              });
-
-              // Execute the transaction for this batch
-              deleteBatch(batchHashes);
-              this.metrics.addBlocks(batchHashes.length);
-
-              log.debug(
-                `Deleted batch of ${batchHashes.length} blocks from queue (${
-                  i + 1
-                }-${
-                  Math.min(i + DELETE_BATCH_SIZE, hashesToDelete.length)
-                } of ${hashesToDelete.length})`,
-              );
-            }
+            log.debug(
+              `Deleted batch of ${batchHashes.length} blocks from queue (${
+                i + 1
+              }-${
+                Math.min(i + DELETE_BATCH_SIZE, hashesToDelete.length)
+              } of ${hashesToDelete.length})`,
+            );
           }
         }
       }
@@ -557,23 +560,21 @@ export class NanoCrawler {
       // Create placeholders for the IN clause (?, ?, ?, etc)
       const placeholders = batch.map(() => "?").join(",");
 
-      {
-        using stmt = this.db.prepare(
-          `SELECT account, frontier FROM accounts WHERE account IN (${placeholders})`,
-        );
+      const stmt = this.db.prepare(
+        `SELECT account, frontier FROM accounts WHERE account IN (${placeholders})`,
+      );
 
-        const rows = stmt.all(...batch).reduce((acc, row) => {
-          acc[row.account] = row.frontier;
-          return acc;
-        }, {} as Record<string, string>);
+      const rows = stmt.all(...batch).reduce((acc, row) => {
+        acc[row.account] = row.frontier;
+        return acc;
+      }, {} as Record<string, string>);
 
-        // Add results to frontiers object
-        for (const account of batch) {
-          if (account in rows) {
-            frontiers[account] = rows[account];
-          } else {
-            frontiers[account] = "";
-          }
+      // Add results to frontiers object
+      for (const account of batch) {
+        if (account in rows) {
+          frontiers[account] = rows[account];
+        } else {
+          frontiers[account] = "";
         }
       }
     }

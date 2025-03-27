@@ -78,6 +78,13 @@ export function initializeDatabase(): Database {
     `);
   }
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ledger_positions (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      account TEXT
+    )
+  `);
+
   return db;
 }
 
@@ -94,5 +101,43 @@ export function closeDatabase(): void {
   if (db) {
     db.close();
     db = null;
+  }
+}
+
+/**
+ * Gets the current ledger position account.
+ * If no ledger position exists in the database, returns the genesis account.
+ * @param genesisAccount The genesis account to use as fallback
+ * @returns The current ledger position account
+ */
+export function getCurrentLedgerPosition(genesisAccount: string): string {
+  const database = getDatabase();
+
+  // Try to get the ledger position from the database
+  const result = database.prepare(
+    "SELECT account FROM ledger_positions WHERE id = 1",
+  ).get();
+
+  // If a ledger position exists, return it; otherwise, return the genesis account
+  return result?.account || genesisAccount;
+}
+
+/**
+ * Updates the current ledger position in the database.
+ * @param account The account to set as the current ledger position
+ */
+export function updateLedgerPosition(account: string): void {
+  const database = getDatabase();
+
+  // First try to update the existing row
+  const updateResult = database.prepare(
+    "UPDATE ledger_positions SET account = ? WHERE id = 1",
+  ).run(account);
+
+  // If no row was updated, insert a new one
+  if (updateResult.changes === 0) {
+    database.prepare(
+      "INSERT INTO ledger_positions (id, account) VALUES (1, ?)",
+    ).run(account);
   }
 }
