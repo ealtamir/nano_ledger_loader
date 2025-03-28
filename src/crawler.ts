@@ -65,16 +65,27 @@ export class NanoCrawler {
           throw new Error(ledgerAccounts.error);
         }
 
-        const accountFrontiers = this.getFrontiers(
+        // Get frontiers from database for these accounts
+        const dbFrontiers = this.getFrontiers(
           Object.keys(ledgerAccounts.accounts),
         );
 
-        const accountsToRemove = Object.keys(ledgerAccounts.accounts).filter(
-          (account) => !(account in accountFrontiers),
-        ).reduce((acc, account) => {
-          acc[account] = "";
-          return acc;
-        }, {} as Record<string, string>);
+        // Collect accounts that need updating (frontier mismatch or new account)
+        const accountsToProcess: string[] = [];
+
+        for (
+          const [account, accountInfo] of Object.entries(
+            ledgerAccounts.accounts,
+          )
+        ) {
+          // If we don't have a frontier or our frontier is different from the chain
+          const dbFrontier = dbFrontiers[account] || "";
+          const chainFrontier = accountInfo.frontier;
+
+          if (dbFrontier !== chainFrontier) {
+            accountsToProcess.push(account);
+          }
+        }
 
         if (Object.keys(ledgerAccounts).length === 0) {
           log.debug("Reached end of ledger, starting over");
@@ -88,18 +99,15 @@ export class NanoCrawler {
         }
 
         log.debug(
-          `Found ${
-            Object.keys(ledgerAccounts.accounts).length -
-            Object.keys(accountsToRemove).length
-          } chain accounts to process`,
+          `Found ${accountsToProcess.length} accounts to process out of ${
+            Object.keys(ledgerAccounts.accounts).length
+          } accounts checked`,
         );
 
-        for (const account of Object.keys(ledgerAccounts.accounts)) {
+        // Queue only accounts that need updating
+        for (const account of accountsToProcess) {
           if (!this.shouldContinue) {
             return;
-          }
-          if (account in accountsToRemove) {
-            continue;
           }
           this.queueAccount(account);
         }
