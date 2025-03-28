@@ -152,7 +152,9 @@ export class NanoCrawler {
     }
   }
 
-  private saveBlocks(blocks: { [key: string]: BlockInfo }): void {
+  private async saveBlocks(
+    blocks: { [key: string]: BlockInfo },
+  ): Promise<void> {
     if (Object.keys(blocks).length === 0) return;
 
     // Build values array for all blocks
@@ -234,14 +236,19 @@ export class NanoCrawler {
       // Process in batches to avoid SQLite parameter limit
       const stmt = this.db.prepare(query);
 
+      let totalInserted = 0;
       // Use a transaction for better performance
       const insertBatch = this.db.transaction((batch: any[]) => {
         for (const row of batch) {
           stmt.run(...row);
+          // Log the changes after each insert
+          log.debug(`Changes from this insert: ${this.db.changes}`);
+          totalInserted += this.db.changes;
         }
+        return totalInserted;
       });
 
-      // Process all values in batches
+      let batchTotalInserted = 0;
       for (let i = 0; i < values.length; i += batchSize) {
         const batch = values.slice(i, i + batchSize);
         log.debug(
@@ -249,12 +256,14 @@ export class NanoCrawler {
             Math.min(i + batchSize, values.length)
           } of ${values.length})`,
         );
-        insertBatch(batch);
+        const inserted = await insertBatch(batch);
+        batchTotalInserted += inserted;
       }
 
       log.debug(
-        `Successfully inserted ${values.length} blocks in batches of up to ${batchSize}`,
+        `Successfully inserted ${batchTotalInserted} new blocks out of ${values.length} attempted in batches of up to ${batchSize}`,
       );
+      this.metrics.addBlocks(batchTotalInserted);
     } catch (error) {
       log.error(
         `Failed to save blocks: ${
@@ -422,7 +431,7 @@ export class NanoCrawler {
           const blocksInfoResponse of this.rpc.getBlocksInfo(batchHashes)
         ) {
           // Save blocks to database
-          this.saveBlocks(blocksInfoResponse.blocks);
+          await this.saveBlocks(blocksInfoResponse.blocks);
 
           // Update metrics
 
@@ -466,8 +475,7 @@ export class NanoCrawler {
             });
 
             // Execute the transaction for this batch
-            deleteBatch(batchHashes);
-            this.metrics.addBlocks(batchHashes.length);
+            await deleteBatch(batchHashes);
 
             log.debug(
               `Deleted batch of ${batchHashes.length} blocks from queue (${
