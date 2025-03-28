@@ -789,24 +789,35 @@ export class NanoCrawler {
     try {
       log.debug(`Adding ${blockHashes.length} blocks to queue`);
 
-      // Use a transaction for better performance with multiple inserts
       const insertStmt = this.db.prepare(`
         INSERT OR IGNORE INTO blocks_queue (hash)
-        SELECT ? WHERE NOT EXISTS (
-          SELECT 1 FROM blocks WHERE hash = ?
-        )
+        VALUES (?)
       `);
 
       const insertMany = this.db.transaction((hashes: string[]) => {
+        let insertedCount = 0;
         for (const hash of hashes) {
-          insertStmt.run(hash, hash);
+          // First check if block exists in blocks table
+          const existsStmt = this.db.prepare(
+            "SELECT 1 FROM blocks WHERE hash = ?",
+          );
+          const exists = existsStmt.get(hash);
+
+          // Only insert into queue if not already in blocks table
+          if (!exists) {
+            insertStmt.run(hash);
+            insertedCount += this.db.changes;
+          }
         }
+        return insertedCount;
       });
 
       // Execute the transaction with all block hashes
-      insertMany(blockHashes);
+      const inserted = insertMany(blockHashes);
 
-      log.debug(`Successfully added ${blockHashes.length} blocks to queue`);
+      log.debug(
+        `Successfully added ${inserted} blocks to queue out of ${blockHashes.length} attempted`,
+      );
     } catch (error) {
       log.error(
         `Failed to add blocks to queue: ${
