@@ -125,15 +125,8 @@ export class NanoRPC {
     count: number = -1,
     account: string | undefined,
   ): AsyncGenerator<string[]> {
-    log.debug(
-      `Starting getSuccessorsGenerator with block: ${block}, count: ${count}, account: ${account}`,
-    );
-
     let currentBlock = block;
     if (!currentBlock && account) {
-      log.debug(
-        `No block provided, fetching frontier block for account: ${account}`,
-      );
       try {
         const accountInfo = await this.getAccountInfo(account);
         if (accountInfo.error) {
@@ -141,7 +134,6 @@ export class NanoRPC {
           return;
         }
         currentBlock = accountInfo.open_block;
-        log.debug(`Using frontier block: ${currentBlock}`);
       } catch (error) {
         log.error(`Failed to fetch account info: ${error}`);
         throw new Error(`Failed to fetch account info: ${error}`);
@@ -196,7 +188,6 @@ export class NanoRPC {
 
   async *getBlocksInfo(blocks: string[]): AsyncGenerator<BlocksInfoResponse> {
     const MAX_BLOCKS_PER_CALL = config.blocks_info_batch_size;
-    log.debug(`Getting blocks info for ${blocks.length} blocks`);
 
     for (let i = 0; i < blocks.length; i += MAX_BLOCKS_PER_CALL) {
       const blockChunk = blocks.slice(i, i + MAX_BLOCKS_PER_CALL);
