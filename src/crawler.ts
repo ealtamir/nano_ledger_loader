@@ -241,8 +241,8 @@ export class NanoCrawler {
       const insertBatch = this.db.transaction((batch: any[]) => {
         for (const row of batch) {
           stmt.run(...row);
-          // Log the changes after each insert
-          log.debug(`Changes from this insert: ${this.db.changes}`);
+          // Comment out this debug log
+          // log.debug(`Changes from this insert: ${this.db.changes}`);
           totalInserted += this.db.changes;
         }
         return totalInserted;
@@ -251,15 +251,17 @@ export class NanoCrawler {
       let batchTotalInserted = 0;
       for (let i = 0; i < values.length; i += batchSize) {
         const batch = values.slice(i, i + batchSize);
-        log.debug(
-          `Inserting batch of ${batch.length} blocks (${i + 1}-${
-            Math.min(i + batchSize, values.length)
-          } of ${values.length})`,
-        );
+        // Comment out this debug log
+        // log.debug(
+        //   `Inserting batch of ${batch.length} blocks (${i + 1}-${
+        //     Math.min(i + batchSize, values.length)
+        //   } of ${values.length})`,
+        // );
         const inserted = await insertBatch(batch);
         batchTotalInserted += inserted;
       }
 
+      // Keep this debug log since it's counting blocks inserted
       log.debug(
         `Successfully inserted ${batchTotalInserted} new blocks out of ${values.length} attempted in batches of up to ${batchSize}`,
       );
@@ -358,7 +360,8 @@ export class NanoCrawler {
     if (!config.identify_new_blocks) {
       return allBlocks;
     }
-    log.debug(`Getting new blocks data for ${allBlocks.length} blocks`);
+    // Comment out this debug log
+    // log.debug(`Getting new blocks data for ${allBlocks.length} blocks`);
 
     try {
       const CHUNK_SIZE = config.new_blocks_batch_size; // better-sqlite3 also has a limit on variables
@@ -382,9 +385,10 @@ export class NanoCrawler {
       const newBlocks = allBlocks.filter((hash) =>
         !existingBlocksSet.has(hash)
       );
-      log.debug(
-        `Found ${newBlocks.length} new blocks from ${allBlocks.length} total blocks`,
-      );
+      // Comment out this debug log
+      // log.debug(
+      //   `Found ${newBlocks.length} new blocks from ${allBlocks.length} total blocks`,
+      // );
       return newBlocks;
     } catch (error) {
       log.error(
@@ -411,7 +415,8 @@ export class NanoCrawler {
         return;
       }
 
-      log.debug(`Processing ${rows.length} blocks from queue`);
+      // Comment out this debug log
+      // log.debug(`Processing ${rows.length} blocks from queue`);
 
       // Extract block hashes
       const blockHashes = rows.map((row) => row.hash);
@@ -539,7 +544,8 @@ export class NanoCrawler {
       }
 
       if (totalBlocks === 0) {
-        log.debug(`No blocks found for account ${account}`);
+        // Comment out this debug log
+        // log.debug(`No blocks found for account ${account}`);
       }
 
       // Mark account as processed and remove from pending
@@ -696,7 +702,8 @@ export class NanoCrawler {
         }
 
         try {
-          log.debug(`Processing ${account}`);
+          // Comment out this debug log
+          // log.debug(`Processing ${account}`);
           await this.processAccount(account, frontier);
           this.removeFromPendingAccounts(account);
           this.metrics.addAccount();
@@ -787,7 +794,8 @@ export class NanoCrawler {
     if (blockHashes.length === 0) return;
 
     try {
-      log.debug(`Adding ${blockHashes.length} blocks to queue`);
+      // Comment out this debug log
+      // log.debug(`Adding ${blockHashes.length} blocks to queue`);
 
       const insertStmt = this.db.prepare(`
         INSERT OR IGNORE INTO blocks_queue (hash)
@@ -815,9 +823,10 @@ export class NanoCrawler {
       // Execute the transaction with all block hashes
       const inserted = insertMany(blockHashes);
 
-      log.debug(
-        `Successfully added ${inserted} blocks to queue out of ${blockHashes.length} attempted`,
-      );
+      // Comment out this debug log
+      // log.debug(
+      //   `Successfully added ${inserted} blocks to queue out of ${blockHashes.length} attempted`,
+      // );
     } catch (error) {
       log.error(
         `Failed to add blocks to queue: ${
