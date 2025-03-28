@@ -236,9 +236,9 @@ export class NanoCrawler {
       // Process in batches to avoid SQLite parameter limit
       const stmt = this.db.prepare(query);
 
-      let totalInserted = 0;
       // Use a transaction for better performance
       const insertBatch = this.db.transaction((batch: any[]) => {
+        let totalInserted = 0;
         for (const row of batch) {
           stmt.run(...row);
           // Comment out this debug log
