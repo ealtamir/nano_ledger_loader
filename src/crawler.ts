@@ -724,8 +724,6 @@ export class NanoCrawler {
           // Comment out this debug log
           // log.debug(`Processing ${account}`);
           await this.processAccount(account, frontier);
-          this.removeFromPendingAccounts(account);
-          this.metrics.addAccount();
         } catch (error) {
           log.error(`Error processing account ${account}: ${error}`);
           this.queueAccount(account);
