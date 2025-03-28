@@ -98,11 +98,13 @@ export class NanoCrawler {
           continue;
         }
 
-        log.debug(
-          `Found ${accountsToProcess.length} accounts to process out of ${
-            Object.keys(ledgerAccounts.accounts).length
-          } accounts checked`,
-        );
+        if (accountsToProcess.length > 0) {
+          log.debug(
+            `Found ${accountsToProcess.length} accounts to process out of ${
+              Object.keys(ledgerAccounts.accounts).length
+            } accounts checked`,
+          );
+        }
 
         // Queue only accounts that need updating
         for (const account of accountsToProcess) {
