@@ -593,9 +593,7 @@ export class NanoCrawler {
       );
 
       const rows = stmt.all(...batch).reduce((acc, row) => {
-        if (row.frontier === "" || row.frontier === null) {
-          acc[row.account] = row.open_block;
-        } else {
+        if (row.frontier !== "" && row.frontier !== null) {
           acc[row.account] = row.frontier;
         }
         return acc;
