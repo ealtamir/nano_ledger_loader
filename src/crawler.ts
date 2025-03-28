@@ -115,7 +115,7 @@ export class NanoCrawler {
         }
 
         // Add small delay between batches to prevent overwhelming the node
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        // await new Promise((resolve) => setTimeout(resolve, 1));
       }
     } catch (error) {
       log.error(
