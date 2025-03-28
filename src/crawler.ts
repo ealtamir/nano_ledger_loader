@@ -799,7 +799,7 @@ export class NanoCrawler {
 
       const insertMany = this.db.transaction((hashes: string[]) => {
         for (const hash of hashes) {
-          insertStmt.run(hash);
+          insertStmt.run(hash, hash);
         }
       });
 
