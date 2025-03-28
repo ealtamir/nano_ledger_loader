@@ -88,7 +88,7 @@ export class NanoCrawler {
         }
 
         if (Object.keys(ledgerAccounts).length === 0) {
-          log.debug("Reached end of ledger, starting over");
+          log.info("Reached end of ledger, starting over");
           lastProcessedAccount = config.genesis_account;
           // Update the ledger position in the database when starting over
           updateLedgerPosition(lastProcessedAccount);
@@ -593,7 +593,11 @@ export class NanoCrawler {
       );
 
       const rows = stmt.all(...batch).reduce((acc, row) => {
-        acc[row.account] = row.frontier;
+        if (row.frontier === "" || row.frontier === null) {
+          acc[row.account] = row.open_block;
+        } else {
+          acc[row.account] = row.frontier;
+        }
         return acc;
       }, {} as Record<string, string>);
 
