@@ -719,7 +719,7 @@ export class NanoCrawler {
           const startTime = Date.now();
           await this.processAccount(account, frontier);
           const endTime = Date.now();
-          log.debug(`Processed account ${account} in ${endTime - startTime}ms`);
+          // log.debug(`Processed account ${account} in ${endTime - startTime}ms`);
           this.metrics.addAccountProcessingTime(endTime - startTime);
         } catch (error) {
           log.error(`Error processing account ${account}: ${error}`);
