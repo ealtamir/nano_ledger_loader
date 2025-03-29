@@ -545,7 +545,7 @@ export class NanoCrawler {
       ) {
         if (blockBatch.length === 0) {
           // log.debug(`No blocks found for account ${account}`);
-          return;
+          break;
         }
         latestBlockHash = blockBatch[blockBatch.length - 1];
         totalBlocks += blockBatch.length;
