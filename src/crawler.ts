@@ -563,6 +563,11 @@ export class NanoCrawler {
       this.saveAccount(account, latestBlockHash);
       this.metrics.addAccount();
     } catch (error: unknown) {
+      log.error(
+        `Failed to process account ${account}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
       throw new Error(
         `Failed to process account ${account}: ${
           error instanceof Error ? error.message : String(error)
