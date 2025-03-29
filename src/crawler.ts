@@ -716,7 +716,11 @@ export class NanoCrawler {
         try {
           // Comment out this debug log
           // log.debug(`Processing ${account}`);
+          const startTime = Date.now();
           await this.processAccount(account, frontier);
+          const endTime = Date.now();
+          log.debug(`Processed account ${account} in ${endTime - startTime}ms`);
+          this.metrics.addAccountProcessingTime(endTime - startTime);
         } catch (error) {
           log.error(`Error processing account ${account}: ${error}`);
           this.queueAccount(account);
@@ -762,9 +766,6 @@ export class NanoCrawler {
             0,
             config.account_processing_batch_size,
           );
-          log.debug(
-            `Processing batch of ${batch.length} pending accounts`,
-          );
           await this.processBatch(batch);
         }
         if (!this.shouldContinue) {
@@ -773,6 +774,9 @@ export class NanoCrawler {
 
         // When queue is empty, check pending_accounts
         const pendingAccounts = this.loadPendingAccounts();
+        log.debug(
+          `Processing batch of ${pendingAccounts.length} pending accounts`,
+        );
         if (pendingAccounts.length === 0) {
           log.info(
             "No more pending accounts to process. Waiting for new blocks...",

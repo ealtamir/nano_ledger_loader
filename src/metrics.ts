@@ -11,6 +11,7 @@ export class CrawlerMetrics {
   private intervalHandler: number | null = null;
   private queueInserted = 0;
   private queueInsertedPerSecond = 0;
+  private accountProcessingTimes: number[] = [];
 
   constructor(reportIntervalMs = 60000) { // Default to reporting every minute
     this.startTime = Date.now();
@@ -37,12 +38,26 @@ export class CrawlerMetrics {
     this.queueInsertedPerSecond += count;
   }
 
+  public addAccountProcessingTime(timeMs: number): void {
+    this.accountProcessingTimes.push(timeMs);
+  }
+
   private reportMetrics(): void {
     const now = Date.now();
     const elapsedSeconds = (now - this.lastReportTime) / 1000;
     const blocksPerSecond = this.blocksProcessedPerSecond / elapsedSeconds;
     const accountsPerSecond = this.accountsProcessedPerSecond / elapsedSeconds;
     const queueInsertedPerSecond = this.queueInsertedPerSecond / elapsedSeconds;
+
+    // Process account processing times
+    const sortedTimes = [...this.accountProcessingTimes].sort((a, b) => a - b);
+    const length = sortedTimes.length;
+
+    const getPercentile = (p: number) => {
+      if (length === 0) return 0;
+      const index = Math.floor(length * p / 100);
+      return sortedTimes[Math.min(index, length - 1)];
+    };
 
     log.info(
       `Crawler Metrics:
@@ -51,11 +66,17 @@ export class CrawlerMetrics {
       Blocks/sec: ${blocksPerSecond.toFixed(2)}
       Accounts/sec: ${accountsPerSecond.toFixed(2)}
       Queue Inserted/sec: ${queueInsertedPerSecond.toFixed(2)}
+      Processing Times (ms):
+        Median: ${getPercentile(50).toFixed(2)}
+        90th %ile: ${getPercentile(90).toFixed(2)}
+        99th %ile: ${getPercentile(99).toFixed(2)}
       Running time: ${(now - this.startTime) / (60 * 1000)} minutes`,
     );
 
     this.blocksProcessedPerSecond = 0;
     this.accountsProcessedPerSecond = 0;
+    this.queueInsertedPerSecond = 0;
+    this.accountProcessingTimes = [];
     this.lastReportTime = now;
   }
 
