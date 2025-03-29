@@ -106,9 +106,11 @@ export class NanoCrawler {
           );
         }
 
-        const qty = accountsToProcess.length -
-          Object.keys(ledgerAccounts.accounts).length;
-        this.metrics.addAccount(qty);
+        // We count a process if we don't need to do anything further with the account
+        this.metrics.addAccount(
+          Object.keys(ledgerAccounts.accounts).length -
+            accountsToProcess.length,
+        );
 
         // Queue only accounts that need updating
         for (const account of accountsToProcess) {
@@ -119,7 +121,7 @@ export class NanoCrawler {
         }
 
         // Add small delay between batches to prevent overwhelming the node
-        await new Promise((resolve) => setTimeout(resolve, 1));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
     } catch (error) {
       log.error(
