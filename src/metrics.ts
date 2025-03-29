@@ -9,6 +9,8 @@ export class CrawlerMetrics {
   private lastReportTime: number;
   private reportIntervalMs: number;
   private intervalHandler: number | null = null;
+  private queueInserted = 0;
+  private queueInsertedPerSecond = 0;
 
   constructor(reportIntervalMs = 60000) { // Default to reporting every minute
     this.startTime = Date.now();
@@ -30,11 +32,17 @@ export class CrawlerMetrics {
     this.accountsProcessedPerSecond += count;
   }
 
+  public addQueueInserted(count: number): void {
+    this.queueInserted += count;
+    this.queueInsertedPerSecond += count;
+  }
+
   private reportMetrics(): void {
     const now = Date.now();
     const elapsedSeconds = (now - this.lastReportTime) / 1000;
     const blocksPerSecond = this.blocksProcessedPerSecond / elapsedSeconds;
     const accountsPerSecond = this.accountsProcessedPerSecond / elapsedSeconds;
+    const queueInsertedPerSecond = this.queueInsertedPerSecond / elapsedSeconds;
 
     log.info(
       `Crawler Metrics:
@@ -42,6 +50,7 @@ export class CrawlerMetrics {
       Total Accounts: ${this.accountsProcessed.toLocaleString()}
       Blocks/sec: ${blocksPerSecond.toFixed(2)}
       Accounts/sec: ${accountsPerSecond.toFixed(2)}
+      Queue Inserted/sec: ${queueInsertedPerSecond.toFixed(2)}
       Running time: ${(now - this.startTime) / (60 * 1000)} minutes`,
     );
 

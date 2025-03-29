@@ -558,12 +558,6 @@ export class NanoCrawler {
         this.addBlocksToQueue(blockBatch);
       }
 
-      if (totalBlocks === 0) {
-        // Comment out this debug log
-        // log.debug(`No blocks found for account ${account}`);
-      }
-
-      // Mark account as processed and remove from pending
       if (this.shouldContinue) {
         this.saveAccount(account, latestBlockHash);
         this.metrics.addAccount();
@@ -822,12 +816,12 @@ export class NanoCrawler {
         for (const hash of hashes) {
           // First check if block exists in blocks table
           const existsStmt = this.db.prepare(
-            "SELECT 1 FROM blocks WHERE hash = ?",
+            "SELECT 1 FROM blocks WHERE hash = ? UNION SELECT 1 FROM blocks_queue WHERE hash = ?",
           );
-          const exists = existsStmt.get(hash);
+          const exists = existsStmt.values(hash, hash);
 
           // Only insert into queue if not already in blocks table
-          if (!exists) {
+          if (exists.length === 0) {
             insertStmt.run(hash);
             insertedCount += this.db.changes;
           }
@@ -837,7 +831,7 @@ export class NanoCrawler {
 
       // Execute the transaction with all block hashes
       const inserted = insertMany(blockHashes);
-
+      this.metrics.addQueueInserted(inserted);
       // Comment out this debug log
       // log.debug(
       //   `Successfully added ${inserted} blocks to queue out of ${blockHashes.length} attempted`,
