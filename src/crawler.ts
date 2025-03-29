@@ -560,10 +560,8 @@ export class NanoCrawler {
         this.addBlocksToQueue(blockBatch);
       }
 
-      if (this.shouldContinue) {
-        this.saveAccount(account, latestBlockHash);
-        this.metrics.addAccount();
-      }
+      this.saveAccount(account, latestBlockHash);
+      this.metrics.addAccount();
     } catch (error: unknown) {
       throw new Error(
         `Failed to process account ${account}: ${
@@ -690,11 +688,12 @@ export class NanoCrawler {
 
       const accountFrontiers = this.getFrontiers(accounts);
 
-      // if (Object.keys(accountFrontiers).length === 0) {
-      //   this.removeFromPendingAccounts(accounts);
-      //   this.metrics.addAccount(accounts.length);
-      //   return;
-      // }
+      if (Object.keys(accountFrontiers).length === 0) {
+        log.debug("Frontiers are empty, removing accounts from pending");
+        this.removeFromPendingAccounts(accounts);
+        this.metrics.addAccount(accounts.length);
+        return;
+      }
 
       // const accountsToRemove = accounts.filter((account) =>
       //   !(account in accountFrontiers)
