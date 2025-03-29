@@ -761,6 +761,9 @@ export class NanoCrawler {
             0,
             config.account_processing_batch_size,
           );
+          log.debug(
+            `Processing batch of ${batch.length} pending accounts`,
+          );
           await this.processBatch(batch);
         }
         if (!this.shouldContinue) {
@@ -774,14 +777,7 @@ export class NanoCrawler {
             "No more pending accounts to process. Waiting for new blocks...",
           );
           await new Promise((resolve) => setTimeout(resolve, 5000));
-        } else {
-          log.debug(
-            `Processing batch of ${pendingAccounts.length} pending accounts`,
-          );
-
-          // This is done as a precaution for cases where accounts were added to pending
-          // and not remove from the list of processed accounts.
-          // this.removeAccounts(pendingAccounts);
+          continue;
         }
 
         // Add pending accounts back to queue
