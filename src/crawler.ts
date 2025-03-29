@@ -157,6 +157,7 @@ export class NanoCrawler {
 
       // Execute the transaction
       transaction(account);
+      log.debug(`Saved account ${account} with frontier ${frontier}`);
     } catch (error) {
       log.error(
         `Failed to save account ${account}: ${
