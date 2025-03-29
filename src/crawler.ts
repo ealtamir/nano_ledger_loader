@@ -106,10 +106,9 @@ export class NanoCrawler {
           );
         }
 
-        this.metrics.addAccount(
-          Object.keys(ledgerAccounts.accounts).length -
-            accountsToProcess.length,
-        );
+        const qty = accountsToProcess.length -
+          Object.keys(ledgerAccounts.accounts).length;
+        this.metrics.addAccount(qty);
 
         // Queue only accounts that need updating
         for (const account of accountsToProcess) {
