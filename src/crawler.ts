@@ -107,10 +107,10 @@ export class NanoCrawler {
         }
 
         // We count a process if we don't need to do anything further with the account
-        this.metrics.addAccount(
-          Object.keys(ledgerAccounts.accounts).length -
-            accountsToProcess.length,
-        );
+        // this.metrics.addAccount(
+        //   Object.keys(ledgerAccounts.accounts).length -
+        //     accountsToProcess.length,
+        // );
 
         // Queue only accounts that need updating
         for (const account of accountsToProcess) {
@@ -121,7 +121,7 @@ export class NanoCrawler {
         }
 
         // Add small delay between batches to prevent overwhelming the node
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 1));
       }
     } catch (error) {
       log.error(
@@ -168,9 +168,12 @@ export class NanoCrawler {
       );
 
       if (!result || result.frontier !== frontier) {
-        throw new Error(
+        log.error(
           `Account verification failed - saved frontier does not match for account ${account}`,
         );
+        Deno.exit(1);
+      } else {
+        this.metrics.addAccount();
       }
     } catch (error) {
       log.error(
@@ -574,7 +577,6 @@ export class NanoCrawler {
       }
 
       this.saveAccount(account, latestBlockHash);
-      this.metrics.addAccount();
     } catch (error: unknown) {
       log.error(
         `Failed to process account ${account}: ${
@@ -706,20 +708,11 @@ export class NanoCrawler {
 
       const accountFrontiers = this.getFrontiers(accounts);
 
-      if (Object.keys(accountFrontiers).length === 0) {
-        log.debug("Frontiers are empty, removing accounts from pending");
-        this.removeFromPendingAccounts(accounts);
-        this.metrics.addAccount(accounts.length);
-        return;
-      }
-
-      // const accountsToRemove = accounts.filter((account) =>
-      //   !(account in accountFrontiers)
-      // );
-
-      // if (accountsToRemove.length > 0) {
-      //   this.removeFromPendingAccounts(accountsToRemove);
-      //   this.metrics.addAccount(accountsToRemove.length);
+      // if (Object.keys(accountFrontiers).length === 0) {
+      //   log.debug("Frontiers are empty, removing accounts from pending");
+      //   this.removeFromPendingAccounts(accounts);
+      //   this.metrics.addAccount(accounts.length);
+      //   return;
       // }
 
       // Process each account sequentially
