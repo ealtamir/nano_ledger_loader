@@ -12,8 +12,9 @@ export function initializeDatabase(): Database {
   // If you specifically need to create only if not existing, you can adjust the options as needed.
   db = new Database("./nano.db", { unsafeConcurrency: true });
   // Executing pragma statements
-  db.exec("pragma journal_mode = WAL"); // WAL mode for better concurrency and write performance
-  db.exec("pragma synchronous = NORMAL"); // Balance durability and performance
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA synchronous = FULL");
+  db.exec("PRAGMA wal_autocheckpoint = 1000"); // auto-checkpoint after 1000 pages
   db.exec("pragma temp_store = MEMORY"); // Temporary data stored in memory
   db.exec("pragma cache_size = -1048576"); // ~1GB for cache (negative for KB)
   db.exec("pragma locking_mode = NORMAL"); // Normal locking mode for safe multi-process access

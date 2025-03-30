@@ -158,6 +158,20 @@ export class NanoCrawler {
 
       // Execute the transaction
       transaction(account);
+
+      // Verify the save by fetching the account back
+      const verifyStmt = this.db.prepare(
+        "SELECT frontier FROM accounts WHERE account = ?",
+      );
+      const result: { frontier: string } | undefined = verifyStmt.get(
+        account,
+      );
+
+      if (!result || result.frontier !== frontier) {
+        throw new Error(
+          `Account verification failed - saved frontier does not match for account ${account}`,
+        );
+      }
     } catch (error) {
       log.error(
         `Failed to save account ${account}: ${
