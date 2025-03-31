@@ -106,19 +106,11 @@ export class NanoCrawler {
           );
         }
 
-        // We count a process if we don't need to do anything further with the account
-        // this.metrics.addAccount(
-        //   Object.keys(ledgerAccounts.accounts).length -
-        //     accountsToProcess.length,
-        // );
-
         // Queue only accounts that need updating
-        for (const account of accountsToProcess) {
-          if (!this.shouldContinue) {
-            return;
-          }
-          this.queueAccount(account);
+        if (!this.shouldContinue) {
+          return;
         }
+        this.addToPendingAccounts(accountsToProcess);
 
         // Add small delay between batches to prevent overwhelming the node
         await new Promise((resolve) => setTimeout(resolve, 1));
@@ -142,6 +134,10 @@ export class NanoCrawler {
   private saveAccount(account: string, frontier: string): void {
     try {
       // Create a transaction for both operations
+      if (frontier === "" || frontier === null) {
+        log.error(`Frontier is empty for account ${account}`);
+        Deno.exit(1);
+      }
       const transaction = this.db.transaction((account: string) => {
         // Replace INSERT OR IGNORE with INSERT OR REPLACE to perform an upsert
         const insertStmt = this.db.prepare(
@@ -310,14 +306,26 @@ export class NanoCrawler {
   }
 
   private addToPendingAccounts(
-    account: string,
+    account: string | string[],
     nodeWebsocket: boolean = false,
   ): void {
     try {
-      const insertStmt = this.db.prepare(
-        "INSERT OR IGNORE INTO pending_accounts (account) VALUES (?)",
-      );
-      insertStmt.run(account);
+      if (Array.isArray(account)) {
+        const BATCH_SIZE = 999; // SQLite parameter limit
+        for (let i = 0; i < account.length; i += BATCH_SIZE) {
+          const batch = account.slice(i, i + BATCH_SIZE);
+          const placeholders = batch.map(() => "?").join(",");
+          const stmt = this.db.prepare(
+            `INSERT OR IGNORE INTO pending_accounts (account) VALUES (${placeholders})`,
+          );
+          stmt.run(...batch);
+        }
+      } else {
+        const insertStmt = this.db.prepare(
+          "INSERT OR IGNORE INTO pending_accounts (account) VALUES (?)",
+        );
+        insertStmt.run(account);
+      }
     } catch (error) {
       log.error(
         `Failed to add account ${account} to pending: ${
@@ -325,49 +333,6 @@ export class NanoCrawler {
         }`,
       );
       throw error; // Re-throw to be handled by caller
-    }
-  }
-
-  private removeFromPendingAccounts(account: string | string[]): void {
-    if (Array.isArray(account)) {
-      // Process array in a batch
-      const placeholders = account.map(() => "?").join(",");
-      const stmt = this.db.prepare(
-        `DELETE FROM pending_accounts WHERE account IN (${placeholders})`,
-      );
-      stmt.run(...account);
-    } else {
-      // Single account deletion
-      const stmt = this.db.prepare(
-        "DELETE FROM pending_accounts WHERE account = ?",
-      );
-      stmt.run(account);
-    }
-  }
-
-  private removeAccounts(accounts: string[]): void {
-    // Skip if no accounts to remove
-    if (accounts.length === 0) return;
-
-    try {
-      // Create and execute transaction
-      const transaction = this.db.transaction((accounts: string[]) => {
-        const stmt = this.db.prepare(
-          "DELETE FROM accounts WHERE account = ?",
-        );
-        for (const account of accounts) {
-          stmt.run(account);
-        }
-      });
-
-      transaction(accounts);
-    } catch (error) {
-      log.error(
-        `Failed to remove accounts: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-      throw error;
     }
   }
 
@@ -447,9 +412,6 @@ export class NanoCrawler {
         setTimeout(() => this.processBlocksQueue(), 10);
         return;
       }
-
-      // Comment out this debug log
-      // log.debug(`Processing ${rows.length} blocks from queue`);
 
       // Extract block hashes
       const blockHashes = rows.map((row) => row.hash);
@@ -550,13 +512,23 @@ export class NanoCrawler {
     try {
       let totalBlocks = 0;
       let latestBlockHash = "";
+      if (!frontier && account) {
+        try {
+          const accountInfo = await this.rpc.getAccountInfo(account);
+          if (!accountInfo || accountInfo.error) {
+            return;
+          }
+          frontier = accountInfo.open_block;
+        } catch (error) {
+          log.error(`Failed to fetch account info: ${error}`);
+          throw new Error(`Failed to fetch account info: ${error}`);
+        }
+      }
 
       // Process blocks as they come in from the chain
       for await (
         const blockBatch of this.rpc.getSuccessorsGenerator(
           frontier,
-          -1,
-          account,
         )
       ) {
         if (blockBatch.length === 0) {
@@ -626,94 +598,9 @@ export class NanoCrawler {
     return frontiers;
   }
 
-  /**
-   * Fetches account information and determines the appropriate frontier hash for each account
-   * that needs processing.
-   *
-   * @param accounts Array of account addresses to process
-   * @returns A map of account addresses to their frontier hashes for processing
-   */
-  private async getAccountsToProcess(
-    accounts: string[],
-  ): Promise<Record<string, string>> {
-    // Step 1: Fetch account info for all accounts in parallel
-    const ledgerPromises = accounts.map((account) =>
-      this.rpc.getAccountInfo(account)
-    );
-
-    // Wait for all promises to settle (some may fail)
-    const promises = await Promise.allSettled(ledgerPromises);
-
-    // Step 2: Process the results, correlating each result with its account
-    const accountLedgerPairs = accounts.map((account, index) => ({
-      account,
-      ledgerPromise: promises[index],
-    }));
-
-    // Filter out failed requests and extract account info
-    const fetchedAccounts = accountLedgerPairs
-      .map((pair) => {
-        if (pair.ledgerPromise.status !== "fulfilled") {
-          log.debug(`Failed to fetch account info for ${pair.account}`);
-          return undefined;
-        }
-        const promiseResult = pair.ledgerPromise.value;
-        promiseResult.account = pair.account; // Ensure account field is set
-        return promiseResult;
-      })
-      .filter((account): account is AccountInfoResponse =>
-        account !== undefined
-      );
-
-    // Step 3: Get current frontiers from database for these accounts
-    const accountFrontiers = this.getFrontiers(
-      fetchedAccounts.map((account) => account.account),
-    );
-
-    // Step 4: For accounts with no frontier in DB, use their open_block as starting point
-    for (const accountData of fetchedAccounts) {
-      const account = accountData.account;
-      if (account in accountFrontiers && accountFrontiers[account] === "") {
-        accountFrontiers[account] = accountData.open_block;
-      }
-    }
-
-    // Step 5: Filter accounts that need processing (frontier != confirmed_frontier)
-    const accountsToProcess = fetchedAccounts
-      .filter((account) =>
-        account.account in accountFrontiers &&
-        accountFrontiers[account.account] !== account.confirmed_frontier
-      )
-      .map((account) => account.account);
-
-    // Step 6: Create final map of accounts to their frontiers
-    const finalFrontiers = accountsToProcess.reduce((acc, account) => {
-      acc[account] = accountFrontiers[account];
-      return acc;
-    }, {} as Record<string, string>);
-
-    log.debug(
-      `Found ${
-        Object.keys(finalFrontiers).length
-      } accounts to process out of ${accounts.length} total`,
-    );
-
-    return finalFrontiers;
-  }
-
   private async processBatch(accounts: string[]): Promise<void> {
     try {
-      // Get accounts that need processing with their frontiers
-      // const accountFrontiers = await this.getAccountsToProcess(accounts);
-
       const accountFrontiers = this.getFrontiers(accounts);
-
-      // if (Object.keys(accountFrontiers).length === 0) {
-      //   log.debug("Frontiers are empty, removing accounts from pending");
-      //   this.removeFromPendingAccounts(accounts);
-      //   this.metrics.addAccount(accounts.length);
-      //   return;
-      // }
 
       // Process each account sequentially
       for (const [account, frontier] of Object.entries(accountFrontiers)) {
@@ -799,6 +686,7 @@ export class NanoCrawler {
         // Add pending accounts back to queue
         for (const account of pendingAccounts) {
           this.accountQueue.push(account);
+          this.metrics.addPendingAccountExtraction();
         }
       }
     } finally {
@@ -844,10 +732,6 @@ export class NanoCrawler {
       // Execute the transaction with all block hashes
       const inserted = insertMany(blockHashes);
       this.metrics.addQueueInserted(inserted);
-      // Comment out this debug log
-      // log.debug(
-      //   `Successfully added ${inserted} blocks to queue out of ${blockHashes.length} attempted`,
-      // );
     } catch (error) {
       log.error(
         `Failed to add blocks to queue: ${

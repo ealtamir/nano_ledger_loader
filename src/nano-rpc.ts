@@ -123,27 +123,13 @@ export class NanoRPC {
   async *getSuccessorsGenerator(
     block: string | undefined,
     count: number = -1,
-    account: string | undefined,
   ): AsyncGenerator<string[]> {
     let currentBlock = block;
-    if (!currentBlock && account) {
-      try {
-        const accountInfo = await this.getAccountInfo(account);
-        if (accountInfo.error) {
-          yield [];
-          return;
-        }
-        currentBlock = accountInfo.open_block;
-      } catch (error) {
-        log.error(`Failed to fetch account info: ${error}`);
-        throw new Error(`Failed to fetch account info: ${error}`);
-      }
-    }
-
     if (!currentBlock) {
-      throw new Error(
+      log.error(
         "No block provided and no account specified to fetch frontier block",
       );
+      Deno.exit(1);
     }
 
     const CHAIN_QUERY_BATCH = config.chain_query_batch_size;
