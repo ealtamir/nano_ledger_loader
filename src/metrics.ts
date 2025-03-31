@@ -14,6 +14,8 @@ export class CrawlerMetrics {
   private accountProcessingTimes: number[] = [];
   private pendingAccountsExtracted = 0;
   private pendingAccountsExtractedPerSecond = 0;
+  private blocksQueried = 0;
+  private blocksQueriedPerSecond = 0;
 
   constructor(reportIntervalMs = 60000) { // Default to reporting every minute
     this.startTime = Date.now();
@@ -49,6 +51,11 @@ export class CrawlerMetrics {
     this.pendingAccountsExtractedPerSecond += count;
   }
 
+  public addBlocksQueried(count: number): void {
+    this.blocksQueried += count;
+    this.blocksQueriedPerSecond += count;
+  }
+
   private reportMetrics(): void {
     const now = Date.now();
     const elapsedSeconds = (now - this.lastReportTime) / 1000;
@@ -57,6 +64,7 @@ export class CrawlerMetrics {
     const queueInsertedPerSecond = this.queueInsertedPerSecond / elapsedSeconds;
     const pendingExtractedPerSecond = this.pendingAccountsExtractedPerSecond /
       elapsedSeconds;
+    const blocksQueriedPerSecond = this.blocksQueriedPerSecond / elapsedSeconds;
 
     // Process account processing times
     const sortedTimes = [...this.accountProcessingTimes].sort((a, b) => a - b);
@@ -73,10 +81,12 @@ export class CrawlerMetrics {
       Total Blocks: ${this.blocksProcessed.toLocaleString()}
       Total Accounts: ${this.accountsProcessed.toLocaleString()}
       Total Pending Extracted: ${this.pendingAccountsExtracted.toLocaleString()}
+      Total Blocks Queried: ${this.blocksQueried.toLocaleString()}
       Blocks/sec: ${blocksPerSecond.toFixed(2)}
       Accounts/sec: ${accountsPerSecond.toFixed(2)}
       Queue Inserted/sec: ${queueInsertedPerSecond.toFixed(2)}
       Pending Extracted/sec: ${pendingExtractedPerSecond.toFixed(2)}
+      Blocks Queried/sec: ${blocksQueriedPerSecond.toFixed(2)}
       Processing Times (ms):
         Median: ${getPercentile(50).toFixed(2)}
         90th %ile: ${getPercentile(90).toFixed(2)}
@@ -88,6 +98,7 @@ export class CrawlerMetrics {
     this.accountsProcessedPerSecond = 0;
     this.queueInsertedPerSecond = 0;
     this.pendingAccountsExtractedPerSecond = 0;
+    this.blocksQueriedPerSecond = 0;
     this.accountProcessingTimes = [];
     this.lastReportTime = now;
   }
@@ -107,6 +118,7 @@ export class CrawlerMetrics {
     this.blocksProcessed = 0;
     this.accountsProcessed = 0;
     this.pendingAccountsExtracted = 0;
+    this.blocksQueried = 0;
     this.startTime = Date.now();
     this.lastReportTime = this.startTime;
     if (!this.intervalHandler) {

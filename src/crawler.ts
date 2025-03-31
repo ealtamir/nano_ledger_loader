@@ -545,6 +545,7 @@ export class NanoCrawler {
         }
         latestBlockHash = blockBatch[blockBatch.length - 1];
         totalBlocks += blockBatch.length;
+        this.metrics.addBlocksQueried(blockBatch.length);
         if (!this.shouldContinue) {
           log.info(
             `Shutdown requested. Finishing current account and exiting...`,
