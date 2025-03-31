@@ -311,14 +311,20 @@ export class NanoCrawler {
   ): void {
     try {
       if (Array.isArray(account)) {
-        const BATCH_SIZE = 999; // SQLite parameter limit
+        const BATCH_SIZE = 500; // SQLite parameter limit
         for (let i = 0; i < account.length; i += BATCH_SIZE) {
           const batch = account.slice(i, i + BATCH_SIZE);
-          const placeholders = batch.map(() => "?").join(",");
-          const stmt = this.db.prepare(
-            `INSERT OR IGNORE INTO pending_accounts (account) VALUES (${placeholders})`,
-          );
-          stmt.run(...batch);
+          const placeholders = batch.map(() => "(?)").join(",");
+
+          // Create and execute transaction for this batch
+          const insertBatch = this.db.transaction((accounts: string[]) => {
+            const stmt = this.db.prepare(
+              `INSERT OR IGNORE INTO pending_accounts (account) VALUES ${placeholders}`,
+            );
+            stmt.run(...accounts);
+          });
+
+          insertBatch(batch);
         }
       } else {
         const insertStmt = this.db.prepare(
