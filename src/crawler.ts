@@ -115,7 +115,7 @@ export class NanoCrawler {
         updateLedgerPosition(lastProcessedAccount);
 
         // Add small delay between batches to prevent overwhelming the node
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 1));
       }
     } catch (error) {
       log.error(
@@ -156,23 +156,24 @@ export class NanoCrawler {
 
       // Execute the transaction
       transaction(account);
+      this.metrics.addAccount();
 
       // Verify the save by fetching the account back
-      const verifyStmt = this.db.prepare(
-        "SELECT frontier FROM accounts WHERE account = ?",
-      );
-      const result: { frontier: string } | undefined = verifyStmt.get(
-        account,
-      );
+      // const verifyStmt = this.db.prepare(
+      //   "SELECT frontier FROM accounts WHERE account = ?",
+      // );
+      // const result: { frontier: string } | undefined = verifyStmt.get(
+      //   account,
+      // );
 
-      if (!result || result.frontier !== frontier) {
-        log.error(
-          `Account verification failed - saved frontier does not match for account ${account}`,
-        );
-        Deno.exit(1);
-      } else {
-        this.metrics.addAccount();
-      }
+      // if (!result || result.frontier !== frontier) {
+      //   log.error(
+      //     `Account verification failed - saved frontier does not match for account ${account}`,
+      //   );
+      //   Deno.exit(1);
+      // } else {
+      //   this.metrics.addAccount();
+      // }
     } catch (error) {
       log.error(
         `Failed to save account ${account}: ${
@@ -282,12 +283,6 @@ export class NanoCrawler {
       let batchTotalInserted = 0;
       for (let i = 0; i < values.length; i += batchSize) {
         const batch = values.slice(i, i + batchSize);
-        // Comment out this debug log
-        // log.debug(
-        //   `Inserting batch of ${batch.length} blocks (${i + 1}-${
-        //     Math.min(i + batchSize, values.length)
-        //   } of ${values.length})`,
-        // );
         const inserted = await insertBatch(batch);
         batchTotalInserted += inserted;
       }
@@ -712,9 +707,6 @@ export class NanoCrawler {
     if (blockHashes.length === 0) return;
 
     try {
-      // Comment out this debug log
-      // log.debug(`Adding ${blockHashes.length} blocks to queue`);
-
       const insertStmt = this.db.prepare(`
         INSERT OR IGNORE INTO blocks_queue (hash)
         VALUES (?)
