@@ -98,11 +98,10 @@ export class NanoCrawler {
           continue;
         }
 
+        const totalAccounts = Object.keys(ledgerAccounts.accounts).length;
         if (accountsToProcess.length > 0) {
           log.debug(
-            `Found ${accountsToProcess.length} accounts to process out of ${
-              Object.keys(ledgerAccounts.accounts).length
-            } accounts checked`,
+            `Found ${accountsToProcess.length} accounts to process out of ${totalAccounts} accounts checked`,
           );
         }
 
@@ -111,6 +110,9 @@ export class NanoCrawler {
           return;
         }
         this.addToPendingAccounts(accountsToProcess);
+        lastProcessedAccount =
+          Object.keys(ledgerAccounts.accounts)[totalAccounts - 1];
+        updateLedgerPosition(lastProcessedAccount);
 
         // Add small delay between batches to prevent overwhelming the node
         await new Promise((resolve) => setTimeout(resolve, 1));
