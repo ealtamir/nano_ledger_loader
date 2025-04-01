@@ -74,7 +74,7 @@ export class NanoCrawler {
           }
         }
 
-        if (Object.keys(ledgerAccounts).length <= 1) {
+        if (Object.keys(ledgerAccounts.accounts).length <= 1) {
           log.info("Reached end of ledger, starting over");
           lastProcessedAccount = config.genesis_account;
           // Update the ledger position in the database when starting over
