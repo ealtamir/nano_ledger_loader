@@ -536,8 +536,8 @@ export class NanoCrawler {
         )
       ) {
         if (blockBatch.length === 1 && blockBatch[0] === frontier) {
-          // No need to save because the recorded frontier matches the top of the chain
-          return;
+          // this can't return because otherwise the account isn't removed from the pending accounts table
+          break;
         }
         latestBlockHash = blockBatch[blockBatch.length - 1];
         totalBlocks += blockBatch.length;
