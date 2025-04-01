@@ -534,7 +534,7 @@ export class NanoCrawler {
           frontier,
         )
       ) {
-        if (blockBatch.length === 0) {
+        if (blockBatch.length === 1 && blockBatch[0] === frontier) {
           // log.debug(`No blocks found for account ${account}`);
           break;
         }
