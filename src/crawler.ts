@@ -26,19 +26,6 @@ export class NanoCrawler {
 
     this.parseLedger();
   }
-
-  private isAccountProcessed(account: string, frontier: string): string {
-    const stmt = this.db.prepare(
-      "SELECT * FROM accounts WHERE account = ?",
-    );
-    const row: { account: string; frontier: string } | undefined = stmt.get(
-      account,
-    );
-    if (row) {
-      return row.frontier === frontier ? "" : row.frontier;
-    }
-    return "";
-  }
   private async parseLedger(): Promise<void> {
     log.info("Starting ledger parsing...");
     if (!this.shouldContinue) return;
@@ -87,7 +74,7 @@ export class NanoCrawler {
           }
         }
 
-        if (Object.keys(ledgerAccounts).length === 0) {
+        if (Object.keys(ledgerAccounts).length <= 1) {
           log.info("Reached end of ledger, starting over");
           lastProcessedAccount = config.genesis_account;
           // Update the ledger position in the database when starting over
@@ -137,6 +124,7 @@ export class NanoCrawler {
   private saveAccount(account: string, frontier: string): void {
     try {
       // Create a transaction for both operations
+      log.debug(`Saving account ${account} with frontier ${frontier}`);
       if (frontier === "" || frontier === null) {
         log.error(`Frontier is empty for account ${account}`);
         Deno.exit(1);
@@ -158,23 +146,6 @@ export class NanoCrawler {
       // Execute the transaction
       transaction(account);
       this.metrics.addAccount();
-
-      // Verify the save by fetching the account back
-      // const verifyStmt = this.db.prepare(
-      //   "SELECT frontier FROM accounts WHERE account = ?",
-      // );
-      // const result: { frontier: string } | undefined = verifyStmt.get(
-      //   account,
-      // );
-
-      // if (!result || result.frontier !== frontier) {
-      //   log.error(
-      //     `Account verification failed - saved frontier does not match for account ${account}`,
-      //   );
-      //   Deno.exit(1);
-      // } else {
-      //   this.metrics.addAccount();
-      // }
     } catch (error) {
       log.error(
         `Failed to save account ${account}: ${
@@ -535,11 +506,7 @@ export class NanoCrawler {
           frontier,
         )
       ) {
-        if (
-          blockBatch.length === 0 ||
-          (blockBatch.length === 1 && blockBatch[0] === frontier)
-        ) {
-          // this can't return because otherwise the account isn't removed from the pending accounts table
+        if (blockBatch.length === 0) {
           latestBlockHash = frontier;
           break;
         }
@@ -664,7 +631,7 @@ export class NanoCrawler {
     Deno.addSignalListener("SIGTERM", signalHandler);
 
     try {
-      this.accountQueue.push(genesisAccount);
+      // this.accountQueue.push(genesisAccount);
 
       while (this.shouldContinue) {
         while (this.shouldContinue && this.accountQueue.length > 0) {
