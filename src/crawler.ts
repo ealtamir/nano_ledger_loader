@@ -489,8 +489,11 @@ export class NanoCrawler {
       let latestBlockHash = "";
       if (!frontier && account) {
         try {
-          const accountInfo = await this.rpc.getAccountInfo(account);
+          const accountInfo = await this.rpc.getLedger(account, 1);
           if (!accountInfo || accountInfo.error) {
+            log.error(
+              `Failed to fetch account ${account} info: ${accountInfo.error}`,
+            );
             return;
           }
           frontier = accountInfo.open_block;
@@ -499,6 +502,7 @@ export class NanoCrawler {
           throw new Error(`Failed to fetch account info: ${error}`);
         }
       }
+      log.debug(`Processing account ${account} with frontier ${frontier}`);
 
       // Process blocks as they come in from the chain
       for await (
@@ -577,6 +581,12 @@ export class NanoCrawler {
   private async processBatch(accounts: string[]): Promise<void> {
     try {
       const accountFrontiers = this.getFrontiers(accounts);
+
+      log.debug(
+        `Processing frontiers of ${
+          Object.keys(accountFrontiers).length
+        } accounts`,
+      );
 
       // Process each account sequentially
       for (const [account, frontier] of Object.entries(accountFrontiers)) {
