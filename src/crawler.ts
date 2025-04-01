@@ -52,10 +52,9 @@ export class NanoCrawler {
           throw new Error(ledgerAccounts.error);
         }
 
+        const accounts = Object.keys(ledgerAccounts.accounts);
         // Get frontiers from database for these accounts
-        const dbFrontiers = this.getFrontiers(
-          Object.keys(ledgerAccounts.accounts),
-        );
+        const dbFrontiers = this.getFrontiers(accounts);
 
         // Collect accounts that need updating (frontier mismatch or new account)
         const accountsToProcess: string[] = [];
@@ -74,7 +73,7 @@ export class NanoCrawler {
           }
         }
 
-        if (Object.keys(ledgerAccounts.accounts).length <= 1) {
+        if (accounts.length <= 1) {
           log.info("Reached end of ledger, starting over");
           lastProcessedAccount = config.genesis_account;
           // Update the ledger position in the database when starting over
@@ -85,7 +84,7 @@ export class NanoCrawler {
           continue;
         }
 
-        const totalAccounts = Object.keys(ledgerAccounts.accounts).length;
+        const totalAccounts = accounts.length;
         if (accountsToProcess.length > 0) {
           log.debug(
             `Found ${accountsToProcess.length} accounts to process out of ${totalAccounts} accounts checked`,
@@ -93,8 +92,7 @@ export class NanoCrawler {
         }
 
         this.addToPendingAccounts(accountsToProcess);
-        lastProcessedAccount =
-          Object.keys(ledgerAccounts.accounts)[totalAccounts - 1];
+        lastProcessedAccount = accounts[totalAccounts - 1];
         updateLedgerPosition(lastProcessedAccount);
 
         // Queue only accounts that need updating
