@@ -496,7 +496,11 @@ export class NanoCrawler {
             );
             return;
           }
-          frontier = accountInfo.open_block;
+          frontier = accountInfo.accounts[account].open_block;
+          if (!frontier) {
+            log.error(`No frontier found for account ${account}`);
+            return;
+          }
         } catch (error) {
           log.error(`Failed to fetch account info: ${error}`);
           throw new Error(`Failed to fetch account info: ${error}`);
