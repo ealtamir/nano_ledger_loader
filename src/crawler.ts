@@ -535,8 +535,8 @@ export class NanoCrawler {
         )
       ) {
         if (blockBatch.length === 1 && blockBatch[0] === frontier) {
-          // log.debug(`No blocks found for account ${account}`);
-          break;
+          // No need to save because the recorded frontier matches the top of the chain
+          return;
         }
         latestBlockHash = blockBatch[blockBatch.length - 1];
         totalBlocks += blockBatch.length;
