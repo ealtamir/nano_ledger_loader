@@ -131,10 +131,17 @@ export function updateLedgerPosition(account: string): void {
   const database = getDatabase();
 
   const transaction = database.transaction(() => {
-    database.prepare("DELETE FROM ledger_positions WHERE 1 = 1").run();
-    database.prepare(
-      "INSERT INTO ledger_positions (id, account) VALUES (1, ?)",
-    ).run(account);
+    const exists = database.prepare(
+      "SELECT 1 FROM ledger_positions WHERE id = 1",
+    ).get();
+    if (exists) {
+      database.prepare("UPDATE ledger_positions SET account = ? WHERE id = 1")
+        .run(account);
+    } else {
+      database.prepare(
+        "INSERT INTO ledger_positions (id, account) VALUES (1, ?)",
+      ).run(account);
+    }
   });
 
   transaction();
