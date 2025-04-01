@@ -121,6 +121,13 @@ export class NanoCrawler {
     }
   }
 
+  private removePendingAccount(account: string): void {
+    const deleteStmt = this.db.prepare(
+      "DELETE FROM pending_accounts WHERE account = ?",
+    );
+    deleteStmt.run(account);
+  }
+
   private saveAccount(account: string, frontier: string): void {
     try {
       // Create a transaction for both operations
@@ -489,22 +496,13 @@ export class NanoCrawler {
       let latestBlockHash = "";
       if (!frontier && account) {
         try {
-          const accountInfo = await this.rpc.getLedger(account, 1);
+          const accountInfo = await this.rpc.getAccountInfo(account);
           if (!accountInfo || accountInfo.error) {
-            log.error(
-              `Failed to fetch account ${account} info: ${accountInfo.error}`,
-            );
+            this.removePendingAccount(account);
+            this.metrics.addAccount();
             return;
           }
-          if (Object.keys(accountInfo.accounts).length === 0) {
-            log.error(`No accounts found for account ${account}`);
-            Deno.exit(1);
-          }
-          frontier = accountInfo.accounts[account].open_block;
-          if (!frontier) {
-            log.error(`No frontier found for account ${account}`);
-            Deno.exit(1);
-          }
+          frontier = accountInfo.open_block;
         } catch (error) {
           log.error(`Failed to fetch account info: ${error}`);
           throw new Error(`Failed to fetch account info: ${error}`);
