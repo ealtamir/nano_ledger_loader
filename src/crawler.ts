@@ -535,8 +535,12 @@ export class NanoCrawler {
           frontier,
         )
       ) {
-        if (blockBatch.length === 1 && blockBatch[0] === frontier) {
+        if (
+          blockBatch.length === 0 ||
+          (blockBatch.length === 1 && blockBatch[0] === frontier)
+        ) {
           // this can't return because otherwise the account isn't removed from the pending accounts table
+          latestBlockHash = frontier;
           break;
         }
         latestBlockHash = blockBatch[blockBatch.length - 1];
