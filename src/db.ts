@@ -81,7 +81,7 @@ export function initializeDatabase(): Database {
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS ledger_positions (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
+      id INTEGER PRIMARY KEY,
       account TEXT
     )
   `);

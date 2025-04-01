@@ -105,14 +105,15 @@ export class NanoCrawler {
           );
         }
 
-        // Queue only accounts that need updating
-        if (!this.shouldContinue) {
-          return;
-        }
         this.addToPendingAccounts(accountsToProcess);
         lastProcessedAccount =
           Object.keys(ledgerAccounts.accounts)[totalAccounts - 1];
         updateLedgerPosition(lastProcessedAccount);
+
+        // Queue only accounts that need updating
+        if (!this.shouldContinue) {
+          return;
+        }
 
         // Add small delay between batches to prevent overwhelming the node
         await new Promise((resolve) => setTimeout(resolve, 1));
