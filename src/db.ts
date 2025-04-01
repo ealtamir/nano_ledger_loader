@@ -130,8 +130,12 @@ export function getCurrentLedgerPosition(genesisAccount: string): string {
 export function updateLedgerPosition(account: string): void {
   const database = getDatabase();
 
-  // Single statement using INSERT OR REPLACE (UPSERT)
-  database.prepare(
-    "INSERT OR REPLACE INTO ledger_positions (id, account) VALUES (1, ?)",
-  ).run(account);
+  const transaction = database.transaction(() => {
+    database.prepare("DELETE FROM ledger_positions WHERE 1 = 1").run();
+    database.prepare(
+      "INSERT INTO ledger_positions (id, account) VALUES (1, ?)",
+    ).run(account);
+  });
+
+  transaction();
 }
