@@ -496,10 +496,14 @@ export class NanoCrawler {
             );
             return;
           }
+          if (Object.keys(accountInfo.accounts).length === 0) {
+            log.error(`No accounts found for account ${account}`);
+            Deno.exit(1);
+          }
           frontier = accountInfo.accounts[account].open_block;
           if (!frontier) {
             log.error(`No frontier found for account ${account}`);
-            return;
+            Deno.exit(1);
           }
         } catch (error) {
           log.error(`Failed to fetch account info: ${error}`);
