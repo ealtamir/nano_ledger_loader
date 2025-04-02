@@ -19,6 +19,7 @@ const ConfigSchema = z.object({
   ledger_parse_batch_size: z.number().default(1_000),
   ledger_parse_interval: z.number().default(60_000),
   genesis_account: z.string(),
+  burn_address: z.string(),
 });
 
 // Create a type from the schema

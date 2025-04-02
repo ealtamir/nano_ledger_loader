@@ -39,6 +39,8 @@ export const config = {
   ledger_parse_interval: 60_000,
   genesis_account:
     "nano_3t6k35gi95xu6tergt6p69ck76ogmitsa8mnijtpxm9fkcm736xtoncuohr3",
+  burn_address:
+    "nano_1111111111111111111111111111111111111111111111111111hifc8npp",
 
   // Whether to identify new blocks
   identify_new_blocks: false,

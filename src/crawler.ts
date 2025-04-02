@@ -1,10 +1,9 @@
 import { NanoRPC } from "./nano-rpc.ts";
-import { AccountInfoResponse, BlockInfo } from "./types.ts";
+import { BlockInfo } from "./types.ts";
 import { log } from "./logger.ts";
 import { Database } from "jsr:@db/sqlite@0.12";
 import { CrawlerMetrics } from "./metrics.ts";
 import { config } from "./config_loader.ts";
-import { Logger } from "jsr:@std/log/get-logger";
 import { getCurrentLedgerPosition, updateLedgerPosition } from "./db.ts";
 export class NanoCrawler {
   private rpc: NanoRPC;
@@ -35,7 +34,7 @@ export class NanoCrawler {
 
       // Get the last processed account from the database, or use genesis if none exists
       let lastProcessedAccount = getCurrentLedgerPosition(
-        config.genesis_account,
+        config.burn_address,
       );
       log.info(`Starting ledger parsing from account: ${lastProcessedAccount}`);
 
@@ -75,7 +74,7 @@ export class NanoCrawler {
 
         if (accounts.length <= 1) {
           log.info("Reached end of ledger, starting over");
-          lastProcessedAccount = config.genesis_account;
+          lastProcessedAccount = config.burn_address;
           // Update the ledger position in the database when starting over
           updateLedgerPosition(lastProcessedAccount);
           await new Promise((resolve) =>
