@@ -43,12 +43,12 @@ export function initializeDatabase(): Database {
       account TEXT NOT NULL UNIQUE
     )
   `);
-  if (config.indexes_enabled) {
-    db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_pending_account 
-      ON pending_accounts(account)
-    `);
-  }
+  // if (config.indexes_enabled) {
+  //   db.exec(`
+  //     CREATE INDEX IF NOT EXISTS idx_pending_account
+  //     ON pending_accounts(account)
+  //   `);
+  // }
 
   // Create blocks table
   db.exec(`
