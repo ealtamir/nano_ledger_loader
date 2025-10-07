@@ -44,5 +44,5 @@ export const config = {
 
   // Whether to identify new blocks
   identify_new_blocks: false,
-  indexes_enabled: false,
+  indexes_enabled: true,
 };
