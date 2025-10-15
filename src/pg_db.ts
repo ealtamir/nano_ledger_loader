@@ -1,4 +1,4 @@
-import { Client } from "postgres";
+import { Client, Pool } from "postgres";
 import type { BlockInfo } from "./types.ts";
 import { config } from "./config_loader.ts";
 import { log } from "./logger.ts";
@@ -12,14 +12,18 @@ const DEFAULT_PG_CONFIG = {
   port: Number(Deno.env.get("POSTGRES_PORT")) || 5432,
 };
 
-export async function initializeDatabase(): Promise<Client> {
-  const client = new Client({
-    hostname: DEFAULT_PG_CONFIG.hostname,
-    port: DEFAULT_PG_CONFIG.port,
-    database: DEFAULT_PG_CONFIG.database,
-    user: DEFAULT_PG_CONFIG.user,
-    password: DEFAULT_PG_CONFIG.password,
-  });
+export async function initializeDatabase(): Promise<Pool> {
+  const client = new Pool(
+    {
+      hostname: DEFAULT_PG_CONFIG.hostname,
+      port: DEFAULT_PG_CONFIG.port,
+      database: DEFAULT_PG_CONFIG.database,
+      user: DEFAULT_PG_CONFIG.user,
+      password: DEFAULT_PG_CONFIG.password,
+    },
+    10,
+    true,
+  );
   await client.connect();
   log.info(
     `Connected to PostgreSQL at ${DEFAULT_PG_CONFIG.hostname}:${DEFAULT_PG_CONFIG.port}`,

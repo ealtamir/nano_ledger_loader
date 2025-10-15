@@ -1,7 +1,7 @@
 import { NanoRPC } from "./nano-rpc.ts";
 import { BlockInfo } from "./types.ts";
 import { log } from "./logger.ts";
-import { Client } from "postgres";
+import { Pool } from "postgres";
 import { CrawlerMetrics } from "./metrics.ts";
 import { config } from "./config_loader.ts";
 import {
@@ -22,12 +22,12 @@ import {
 export class NanoCrawler {
   private rpc: NanoRPC;
   private accountQueue: string[];
-  private client: Client; // <-- postgres client instance
+  private client: Pool; // <-- postgres client instance
   private metrics: CrawlerMetrics; // Add this line
 
   private shouldContinue: boolean = true;
 
-  constructor(rpcUrl: string, client: Client) {
+  constructor(rpcUrl: string, client: Pool) {
     this.rpc = new NanoRPC(rpcUrl);
     this.accountQueue = [];
     this.client = client;
