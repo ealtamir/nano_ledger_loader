@@ -1,7 +1,8 @@
-import { NanoCrawler } from "./crawler.ts";
-import { initializeDatabase } from "./db.ts";
+import { NanoCrawler } from "./pg_crawler.ts";
+// import { initializeDatabase } from "./db.ts";
 import { log } from "./logger.ts";
 import { NanoWebSocket } from "./nano-websocket.ts";
+import { initializeDatabase } from "./pg_db.ts";
 
 if (import.meta.main) {
   const GENESIS_ACCOUNT =
@@ -14,15 +15,15 @@ if (import.meta.main) {
   log.info(`Starting Nano Crawler with RPC endpoint ${RPC_ENDPOINT}`);
   log.info(`Starting Nano Crawler with WS endpoint ${WS_ENDPOINT}`);
 
-  const db = initializeDatabase();
-  const crawler = new NanoCrawler(RPC_ENDPOINT, db);
-  const wsClient = new NanoWebSocket(WS_ENDPOINT, crawler);
+  const client = await initializeDatabase();
+  const crawler = new NanoCrawler(RPC_ENDPOINT, client);
+  // const wsClient = new NanoWebSocket(WS_ENDPOINT, crawler);
 
   try {
     await crawler.crawl(GENESIS_ACCOUNT);
     log.info("Exploration completed successfully!");
-    wsClient.close();
-    db.close();
+    // wsClient.close();
+    client.end();
   } catch (error) {
     console.error("Exploration failed:", error);
     Deno.exit(1);

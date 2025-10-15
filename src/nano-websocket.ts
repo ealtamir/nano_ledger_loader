@@ -1,5 +1,5 @@
 import { Block } from "./types.ts";
-import { NanoCrawler } from "./crawler.ts";
+import { NanoCrawler } from "./pg_crawler.ts";
 import { log } from "./logger.ts";
 
 interface ConfirmationMessage {
@@ -12,7 +12,10 @@ interface ConfirmationMessage {
     block: Block;
   };
   options?: {
-    confirmation_type: "active" | "active_quorum" | "active_confirmation_height";
+    confirmation_type:
+      | "active"
+      | "active_quorum"
+      | "active_confirmation_height";
   };
 }
 
@@ -28,7 +31,7 @@ export class NanoWebSocket {
   private shouldContinue: boolean = true;
   constructor(
     private readonly wsAddress: string,
-    private readonly crawler: NanoCrawler
+    private readonly crawler: NanoCrawler,
   ) {
     this.connect();
   }
@@ -80,11 +83,11 @@ export class NanoWebSocket {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       log.warn(
-        `Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`
+        `Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`,
       );
       setTimeout(
         () => this.connect(),
-        this.reconnectDelay * this.reconnectAttempts
+        this.reconnectDelay * this.reconnectAttempts,
       );
     } else {
       log.error("Max reconnection attempts reached");
@@ -97,21 +100,21 @@ export class NanoWebSocket {
         action: "subscribe",
         topic: "confirmation",
         options: {
-            confirmation_type: "active"
-        }
+          confirmation_type: "active",
+        },
       }));
     }
   }
 
   private async handleNewBlock(message: ConfirmationMessage) {
     const block = message.message.block;
-    
+
     // Extract relevant accounts from the block
     const accounts = new Set<string>();
-    
+
     // Add sender account
     accounts.add(block.account);
-    
+
     // Add recipient account (could be in link_as_account or destination)
     if (block.link_as_account) {
       accounts.add(block.link_as_account);
@@ -124,9 +127,15 @@ export class NanoWebSocket {
     for (const account of accounts) {
       try {
         await this.crawler.queueAccount(account, true);
-        log.debug(`Queued account ${account} from new block ${message.message.hash}`);
+        log.debug(
+          `Queued account ${account} from new block ${message.message.hash}`,
+        );
       } catch (error) {
-        log.error(`Failed to queue account ${account}: ${error instanceof Error ? error.message : String(error)}`);
+        log.error(
+          `Failed to queue account ${account}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
       }
     }
   }

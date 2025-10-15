@@ -1,19 +1,26 @@
 {
-  "version": "4",
+  "version": "5",
   "specifiers": {
+    "jsr:@db/postgres@0.19.4": "0.19.4",
     "jsr:@db/sqlite@0.12": "0.12.0",
     "jsr:@denosaurs/plug@1": "1.0.6",
     "jsr:@std/assert@0.217": "0.217.0",
     "jsr:@std/assert@0.221": "0.221.0",
+    "jsr:@std/bytes@^1.0.5": "1.0.6",
+    "jsr:@std/crypto@^1.0.4": "1.0.4",
     "jsr:@std/encoding@0.221": "0.221.0",
+    "jsr:@std/encoding@^1.0.9": "1.0.10",
     "jsr:@std/fmt@0.221": "0.221.0",
     "jsr:@std/fmt@^1.0.2": "1.0.3",
+    "jsr:@std/fmt@^1.0.6": "1.0.8",
     "jsr:@std/fs@0.221": "0.221.0",
     "jsr:@std/fs@^1.0.4": "1.0.6",
+    "jsr:@std/internal@^1.0.10": "1.0.10",
     "jsr:@std/io@0.225": "0.225.0",
     "jsr:@std/log@*": "0.224.9",
     "jsr:@std/path@0.217": "0.217.0",
     "jsr:@std/path@0.221": "0.221.0",
+    "jsr:@std/path@^1.0.8": "1.1.2",
     "npm:@types/node@*": "22.10.1",
     "npm:better-sqlite3@*": "9.5.0",
     "npm:better-sqlite3@11.9.1": "11.9.1",
@@ -21,6 +28,16 @@
     "npm:redis@4.6.7": "4.6.7_@redis+client@1.5.8"
   },
   "jsr": {
+    "@db/postgres@0.19.4": {
+      "integrity": "fef22be0d4c08b445c7c98bb88dd652da96194a11ccd0a959e4a04223d1c1b2b",
+      "dependencies": [
+        "jsr:@std/bytes",
+        "jsr:@std/crypto",
+        "jsr:@std/encoding@^1.0.9",
+        "jsr:@std/fmt@^1.0.6",
+        "jsr:@std/path@^1.0.8"
+      ]
+    },
     "@db/sqlite@0.12.0": {
       "integrity": "dd1ef7f621ad50fc1e073a1c3609c4470bd51edc0994139c5bf9851de7a6d85f",
       "dependencies": [
@@ -31,7 +48,7 @@
     "@denosaurs/plug@1.0.6": {
       "integrity": "6cf5b9daba7799837b9ffbe89f3450510f588fafef8115ddab1ff0be9cb7c1a7",
       "dependencies": [
-        "jsr:@std/encoding",
+        "jsr:@std/encoding@0.221",
         "jsr:@std/fmt@0.221",
         "jsr:@std/fs@0.221",
         "jsr:@std/path@0.221"
@@ -43,14 +60,26 @@
     "@std/assert@0.221.0": {
       "integrity": "a5f1aa6e7909dbea271754fd4ab3f4e687aeff4873b4cef9a320af813adb489a"
     },
+    "@std/bytes@1.0.6": {
+      "integrity": "f6ac6adbd8ccd99314045f5703e23af0a68d7f7e58364b47d2c7f408aeb5820a"
+    },
+    "@std/crypto@1.0.4": {
+      "integrity": "cee245c453bd5366207f4d8aa25ea3e9c86cecad2be3fefcaa6cb17203d79340"
+    },
     "@std/encoding@0.221.0": {
       "integrity": "d1dd76ef0dc5d14088411e6dc1dede53bf8308c95d1537df1214c97137208e45"
+    },
+    "@std/encoding@1.0.10": {
+      "integrity": "8783c6384a2d13abd5e9e87a7ae0520a30e9f56aeeaa3bdf910a3eaaf5c811a1"
     },
     "@std/fmt@0.221.0": {
       "integrity": "379fed69bdd9731110f26b9085aeb740606b20428ce6af31ef6bd45ef8efa62a"
     },
     "@std/fmt@1.0.3": {
       "integrity": "97765c16aa32245ff4e2204ecf7d8562496a3cb8592340a80e7e554e0bb9149f"
+    },
+    "@std/fmt@1.0.8": {
+      "integrity": "71e1fc498787e4434d213647a6e43e794af4fd393ef8f52062246e06f7e372b7"
     },
     "@std/fs@0.221.0": {
       "integrity": "028044450299de8ed5a716ade4e6d524399f035513b85913794f4e81f07da286",
@@ -61,6 +90,9 @@
     },
     "@std/fs@1.0.6": {
       "integrity": "42b56e1e41b75583a21d5a37f6a6a27de9f510bcd36c0c85791d685ca0b85fa2"
+    },
+    "@std/internal@1.0.10": {
+      "integrity": "e3be62ce42cab0e177c27698e5d9800122f67b766a0bea6ca4867886cbde8cf7"
     },
     "@std/io@0.225.0": {
       "integrity": "c1db7c5e5a231629b32d64b9a53139445b2ca640d828c26bf23e1c55f8c079b3"
@@ -83,6 +115,12 @@
       "integrity": "0a36f6b17314ef653a3a1649740cc8db51b25a133ecfe838f20b79a56ebe0095",
       "dependencies": [
         "jsr:@std/assert@0.221"
+      ]
+    },
+    "@std/path@1.1.2": {
+      "integrity": "c0b13b97dfe06546d5e16bf3966b1cadf92e1cc83e56ba5476ad8b498d9e3038",
+      "dependencies": [
+        "jsr:@std/internal"
       ]
     }
   },
@@ -139,14 +177,16 @@
       "dependencies": [
         "bindings",
         "prebuild-install"
-      ]
+      ],
+      "scripts": true
     },
     "better-sqlite3@9.5.0": {
       "integrity": "sha512-01qVcM4gPNwE+PX7ARNiHINwzVuD6nx0gdldaAAcu+MrzyIAukQ31ZDKEpzRO/CNA9sHpxoTZ8rdjoyAin4dyg==",
       "dependencies": [
         "bindings",
         "prebuild-install"
-      ]
+      ],
+      "scripts": true
     },
     "bindings@1.5.0": {
       "integrity": "sha512-p2q/t/mhvuOj/UeLlV6566GD/guowlr0hHxClI0W9m7MWYkL1F0hLo+0Aexs9HSPCtR1SXQ0TD3MMKrXZajbiQ==",
@@ -259,7 +299,8 @@
         "simple-get",
         "tar-fs",
         "tunnel-agent"
-      ]
+      ],
+      "bin": true
     },
     "pump@3.0.0": {
       "integrity": "sha512-LwZy+p3SFs1Pytd/jYct4wpv49HiYCqd9Rlc5ZVdk0V+8Yzv6jR5Blk3TRmPL1ft69TxP0IMZGJ+WPFU2BFhww==",
@@ -275,7 +316,8 @@
         "ini",
         "minimist",
         "strip-json-comments"
-      ]
+      ],
+      "bin": true
     },
     "readable-stream@3.6.2": {
       "integrity": "sha512-9u/sniCrY3D5WdsERHzHE4G2YCXqoG5FTHUiCC4SIbr6XcLZBY05ya9EKjYek9O5xOAwjGq+1JdGBAS7Q9ScoA==",
@@ -300,7 +342,8 @@
       "integrity": "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ=="
     },
     "semver@7.6.3": {
-      "integrity": "sha512-oVekP1cKtI+CTDvHWYFUcMtsK/00wmAEfyqKfNdARm8u1wNVhSgaX7A8d4UuIlUI5e84iEwOhs7ZPYRmzU9U6A=="
+      "integrity": "sha512-oVekP1cKtI+CTDvHWYFUcMtsK/00wmAEfyqKfNdARm8u1wNVhSgaX7A8d4UuIlUI5e84iEwOhs7ZPYRmzU9U6A==",
+      "bin": true
     },
     "simple-concat@1.0.1": {
       "integrity": "sha512-cSFtAPtRhljv69IK0hTVZQ+OfE9nePi/rtJmw5UjHeVyVroEqJXP1sFztKUy1qU+xvz3u/sfYJLa947b7nAN2Q=="
@@ -402,7 +445,7 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@std/assert@1"
+      "jsr:@db/postgres@0.19.4"
     ]
   }
 }
