@@ -22,15 +22,15 @@ import {
 export class NanoCrawler {
   private rpc: NanoRPC;
   private accountQueue: string[];
-  private client: Pool; // <-- postgres client instance
+  private pool: Pool; // <-- postgres pool instance
   private metrics: CrawlerMetrics; // Add this line
 
   private shouldContinue: boolean = true;
 
-  constructor(rpcUrl: string, client: Pool) {
+  constructor(rpcUrl: string, pool: Pool) {
     this.rpc = new NanoRPC(rpcUrl);
     this.accountQueue = [];
-    this.client = client;
+    this.pool = pool;
     this.metrics = new CrawlerMetrics(1000 * 30); // Print logs every 30 seconds
     this.shouldContinue = true;
 
@@ -48,7 +48,7 @@ export class NanoCrawler {
 
       // Get the last processed account from the database, or use genesis if none exists
       let lastProcessedAccount = await getCurrentLedgerPosition(
-        this.client,
+        this.pool,
         config.burn_address,
       );
       log.info(`Starting ledger parsing from account: ${lastProcessedAccount}`);
@@ -68,7 +68,7 @@ export class NanoCrawler {
 
         const accounts = Object.keys(ledgerAccounts.accounts);
         // Get frontiers from database for these accounts
-        const dbFrontiers = await getFrontiers(this.client, accounts);
+        const dbFrontiers = await getFrontiers(this.pool, accounts);
 
         // Collect accounts that need updating (frontier mismatch or new account)
         const accountsToProcess: string[] = [];
@@ -91,7 +91,7 @@ export class NanoCrawler {
           log.info("Reached end of ledger, starting over");
           lastProcessedAccount = config.burn_address;
           // Update the ledger position in the database when starting over
-          await updateLedgerPosition(this.client, lastProcessedAccount);
+          await updateLedgerPosition(this.pool, lastProcessedAccount);
           await new Promise((resolve) =>
             setTimeout(resolve, config.ledger_parse_interval || 60000)
           );
@@ -107,7 +107,7 @@ export class NanoCrawler {
 
         await this.addToPendingAccounts(accountsToProcess);
         lastProcessedAccount = accounts[totalAccounts - 1];
-        await updateLedgerPosition(this.client, lastProcessedAccount);
+        await updateLedgerPosition(this.pool, lastProcessedAccount);
 
         // Queue only accounts that need updating
         if (!this.shouldContinue) {
@@ -134,7 +134,7 @@ export class NanoCrawler {
   }
 
   private async removePendingAccount(account: string): Promise<void> {
-    await removePendingAccount(this.client, account);
+    await removePendingAccount(this.pool, account);
   }
 
   private async saveAccount(account: string, frontier: string): Promise<void> {
@@ -145,7 +145,7 @@ export class NanoCrawler {
         log.error(`Frontier is empty for account ${account}`);
         Deno.exit(1);
       }
-      await saveAccount(this.client, account, frontier);
+      await saveAccount(this.pool, account, frontier);
       this.metrics.addAccount();
     } catch (error) {
       log.error(
@@ -163,7 +163,7 @@ export class NanoCrawler {
     if (Object.keys(blocks).length === 0) return;
 
     try {
-      const inserted = await saveBlocks(this.client, blocks);
+      const inserted = await saveBlocks(this.pool, blocks);
       log.debug(
         `Successfully inserted ${inserted} new blocks out of ${
           Object.keys(blocks).length
@@ -186,7 +186,7 @@ export class NanoCrawler {
   ): Promise<void> {
     try {
       const accounts = Array.isArray(account) ? account : [account];
-      await addToPendingAccounts(this.client, accounts);
+      await addToPendingAccounts(this.pool, accounts);
     } catch (error) {
       log.error(
         `Failed to add account ${account} to pending: ${
@@ -201,7 +201,7 @@ export class NanoCrawler {
     if (batchSize === -1) {
       batchSize = config.pending_accounts_batch_size;
     }
-    return await loadPendingAccounts(this.client, batchSize);
+    return await loadPendingAccounts(this.pool, batchSize);
   }
 
   public async queueAccount(
@@ -218,7 +218,7 @@ export class NanoCrawler {
     }
 
     try {
-      return await getNewBlocks(this.client, allBlocks);
+      return await getNewBlocks(this.pool, allBlocks);
     } catch (error) {
       log.error(
         `Failed to query existing blocks: ${
@@ -232,7 +232,7 @@ export class NanoCrawler {
   private async processBlocksQueue(): Promise<void> {
     try {
       const blockHashes = await getHashesFromBlocksQueue(
-        this.client,
+        this.pool,
         config.block_queue_select_batch_size,
       );
 
@@ -277,7 +277,7 @@ export class NanoCrawler {
 
           // Get the block hashes to delete
           const hashesToDelete = Object.keys(blocksInfoResponse.blocks);
-          await removeHashesFromBlocksQueue(this.client, hashesToDelete);
+          await removeHashesFromBlocksQueue(this.pool, hashesToDelete);
           log.debug(
             `Deleted batch of ${hashesToDelete.length} blocks from queue.`,
           );
@@ -366,7 +366,7 @@ export class NanoCrawler {
   private async getFrontiers(
     accounts: string[],
   ): Promise<Record<string, string>> {
-    return await getFrontiers(this.client, accounts);
+    return await getFrontiers(this.pool, accounts);
   }
 
   private async processBatch(accounts: string[]): Promise<void> {
@@ -480,7 +480,7 @@ export class NanoCrawler {
     if (blockHashes.length === 0) return;
 
     try {
-      const inserted = await addBlocksToQueue(this.client, blockHashes);
+      const inserted = await addBlocksToQueue(this.pool, blockHashes);
       this.metrics.addQueueInserted(inserted);
     } catch (error) {
       log.error(

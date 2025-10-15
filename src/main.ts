@@ -17,12 +17,12 @@ if (import.meta.main) {
 
   const client = await initializeDatabase();
   const crawler = new NanoCrawler(RPC_ENDPOINT, client);
-  // const wsClient = new NanoWebSocket(WS_ENDPOINT, crawler);
+  const wsClient = new NanoWebSocket(WS_ENDPOINT, crawler);
 
   try {
     await crawler.crawl(GENESIS_ACCOUNT);
     log.info("Exploration completed successfully!");
-    // wsClient.close();
+    wsClient.close();
     client.end();
   } catch (error) {
     console.error("Exploration failed:", error);

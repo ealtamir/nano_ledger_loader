@@ -24,11 +24,13 @@ export class NanoWebSocket {
   private reconnectAttempts: number = 0;
   private readonly maxReconnectAttempts: number = 5;
   private readonly reconnectDelay: number = 1000;
+  private readonly connectionTimeout: number = 10000; // 10 seconds
   private pingInterval: number = 30000; // 30 seconds
   private pingTimeout: number = 5000; // 5 seconds
   private pingTimer?: number;
   private pongReceived: boolean = false;
   private shouldContinue: boolean = true;
+  private connectionTimer?: number;
   constructor(
     private readonly wsAddress: string,
     private readonly crawler: NanoCrawler,
@@ -37,10 +39,21 @@ export class NanoWebSocket {
   }
 
   private connect() {
+    log.info("Connecting to Nano node");
     this.ws = new WebSocket(this.wsAddress);
+
+    // Set up connection timeout
+    this.connectionTimer = setTimeout(() => {
+      if (this.ws.readyState === WebSocket.CONNECTING) {
+        log.error("Connection timeout - closing WebSocket");
+        this.ws.close();
+        this.handleReconnect();
+      }
+    }, this.connectionTimeout);
 
     this.ws.addEventListener("open", () => {
       log.info("Connected to Nano node");
+      this.clearConnectionTimeout();
       this.reconnectAttempts = 0;
       this.subscribeToConfirmations();
       this.startPingInterval();
@@ -65,11 +78,13 @@ export class NanoWebSocket {
 
     this.ws.addEventListener("close", () => {
       log.debug("Connection closed");
+      this.clearConnectionTimeout();
       this.handleReconnect();
     });
 
     this.ws.addEventListener("error", (event: Event) => {
       log.error("WebSocket error:", event);
+      this.clearConnectionTimeout();
       this.handleReconnect();
     });
   }
@@ -152,6 +167,13 @@ export class NanoWebSocket {
     }
   }
 
+  private clearConnectionTimeout() {
+    if (this.connectionTimer) {
+      clearTimeout(this.connectionTimer);
+      this.connectionTimer = undefined;
+    }
+  }
+
   private ping() {
     if (this.ws.readyState === WebSocket.OPEN) {
       this.pongReceived = false;
@@ -168,6 +190,7 @@ export class NanoWebSocket {
 
   public close() {
     this.stopPingInterval();
+    this.clearConnectionTimeout();
     if (this.ws) {
       this.ws.close();
       this.shouldContinue = false;

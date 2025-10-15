@@ -1,4 +1,4 @@
-import { Client, Pool } from "postgres";
+import { Pool } from "postgres";
 import type { BlockInfo } from "./types.ts";
 import { config } from "./config_loader.ts";
 import { log } from "./logger.ts";
@@ -13,7 +13,7 @@ const DEFAULT_PG_CONFIG = {
 };
 
 export async function initializeDatabase(): Promise<Pool> {
-  const client = new Pool(
+  const pool = new Pool(
     {
       hostname: DEFAULT_PG_CONFIG.hostname,
       port: DEFAULT_PG_CONFIG.port,
@@ -24,32 +24,56 @@ export async function initializeDatabase(): Promise<Pool> {
     10,
     true,
   );
-  await client.connect();
+  await pool.connect();
   log.info(
     `Connected to PostgreSQL at ${DEFAULT_PG_CONFIG.hostname}:${DEFAULT_PG_CONFIG.port}`,
   );
-  return client;
+  return pool;
+}
+
+// Helper function for running queries with proper connection management
+async function runQuery<T = Record<string, unknown>>(
+  pool: Pool,
+  query: string,
+  params?: unknown[],
+): Promise<T[]> {
+  using client = await pool.connect();
+  const result = await client.queryObject<T>(query, params);
+  return result.rows;
+}
+
+// Helper function for running queries that return row count
+async function runQueryWithCount(
+  pool: Pool,
+  query: string,
+  params?: unknown[],
+): Promise<number> {
+  using client = await pool.connect();
+  const result = await client.queryArray(query, params);
+  return result.rowCount ?? 0;
 }
 
 export async function getCurrentLedgerPosition(
-  client: Client,
+  pool: Pool,
   defaultPosition: string,
 ): Promise<string> {
-  const result = await client.queryObject<{ value: string }>(
+  const rows = await runQuery<{ value: string }>(
+    pool,
     "SELECT value FROM ledger_loader_metadata WHERE key = 'ledger_position'",
   );
-  if (result.rows.length > 0) {
-    return result.rows[0].value;
+  if (rows.length > 0) {
+    return rows[0].value;
   } else {
-    await updateLedgerPosition(client, defaultPosition);
+    await updateLedgerPosition(pool, defaultPosition);
     return defaultPosition;
   }
 }
 
 export async function updateLedgerPosition(
-  client: Client,
+  pool: Pool,
   position: string,
 ): Promise<void> {
+  using client = await pool.connect();
   await client.queryArray`
     INSERT INTO ledger_loader_metadata (key, value) VALUES ('ledger_position', ${position})
     ON CONFLICT (key) DO UPDATE SET value = ${position};
@@ -57,18 +81,20 @@ export async function updateLedgerPosition(
 }
 
 export async function removePendingAccount(
-  client: Client,
+  pool: Pool,
   account: string,
 ): Promise<void> {
+  using client = await pool.connect();
   await client
     .queryArray`DELETE FROM ledger_loader_pending_accounts WHERE account = ${account}`;
 }
 
 export async function saveAccount(
-  client: Client,
+  pool: Pool,
   account: string,
   frontier: string,
 ): Promise<void> {
+  using client = await pool.connect();
   const transaction = client.createTransaction("save_account");
   await transaction.begin();
   try {
@@ -87,7 +113,7 @@ export async function saveAccount(
 }
 
 export async function saveBlocks(
-  client: Client,
+  pool: Pool,
   blocks: { [key: string]: BlockInfo },
 ): Promise<number> {
   if (Object.keys(blocks).length === 0) return 0;
@@ -98,7 +124,9 @@ export async function saveBlocks(
 
   for (let i = 0; i < blockHashes.length; i += BATCH_SIZE) {
     const batchHashes = blockHashes.slice(i, i + BATCH_SIZE);
-    const batchBlocks = batchHashes.map((hash) => [hash, blocks[hash]]);
+    const batchBlocks = batchHashes.map((hash) =>
+      [hash, blocks[hash]] as [string, BlockInfo]
+    );
 
     const columns = [
       "hash",
@@ -121,14 +149,14 @@ export async function saveBlocks(
     ];
 
     // Transpose the data into columnar arrays for unnest
-    const columnarData: any[][] = columns.map(() => []);
+    const columnarData: unknown[][] = columns.map(() => []);
     const dataTypes = [
       "varchar",
       "varchar",
       "varchar",
       "varchar",
       "varchar",
-      "bigint",
+      "numeric",
       "varchar",
       "varchar",
       "varchar",
@@ -138,13 +166,13 @@ export async function saveBlocks(
       "integer",
       "boolean",
       "varchar",
-      "bigint",
+      "numeric",
       "bigint",
     ];
 
     for (const [, info] of batchBlocks) {
       const hash = blockHashes.find((h) => blocks[h] === info);
-      let row: any[];
+      let row: unknown[];
       if (info.contents.type !== "state") {
         row = [
           hash,
@@ -152,7 +180,7 @@ export async function saveBlocks(
           info.block_account,
           info.contents.previous || null,
           info.contents.representative || null,
-          info.balance ? BigInt(info.balance) : null,
+          info.balance ? info.balance : null,
           info.contents.link || null,
           info.contents.link_as_account || info.contents.destination || null,
           null,
@@ -162,7 +190,7 @@ export async function saveBlocks(
           info.height,
           info.confirmed === "true",
           info.successor || null,
-          info.amount ? BigInt(info.amount) : null,
+          info.amount ? info.amount : null,
           info.local_timestamp ? BigInt(info.local_timestamp) : null,
         ];
       } else {
@@ -172,7 +200,7 @@ export async function saveBlocks(
           info.contents.account,
           info.contents.previous || null,
           info.contents.representative || null,
-          info.contents.balance ? BigInt(info.contents.balance) : null,
+          info.contents.balance ? info.contents.balance : null,
           info.contents.link || null,
           info.contents.link_as_account || null,
           info.contents.destination || null,
@@ -182,7 +210,7 @@ export async function saveBlocks(
           info.height,
           !!info.confirmed,
           info.successor || null,
-          info.amount ? BigInt(info.amount) : null,
+          info.amount ? info.amount : null,
           info.local_timestamp ? BigInt(info.local_timestamp) : null,
         ];
       }
@@ -196,14 +224,18 @@ export async function saveBlocks(
     const query = `
       INSERT INTO ledger_loader_blocks (${columns.join(", ")})
       SELECT ${unnestClauses}
-      ON CONFLICT (hash) DO NOTHING;
+      ON CONFLICT (hash, local_timestamp) DO NOTHING;
     `;
 
     try {
-      const result = await client.queryArray(query, columnarData);
-      totalInserted += result.rowCount ?? 0;
+      const inserted = await runQueryWithCount(pool, query, columnarData);
+      totalInserted += inserted;
     } catch (e) {
-      log.error(`Error during bulk block insert: ${e.message}`);
+      log.error(
+        `Error during bulk block insert: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
       throw e;
     }
   }
@@ -212,7 +244,7 @@ export async function saveBlocks(
 }
 
 export async function addToPendingAccounts(
-  client: Client,
+  pool: Pool,
   accounts: string | string[],
 ): Promise<void> {
   const accs = Array.isArray(accounts) ? accounts : [accounts];
@@ -225,21 +257,23 @@ export async function addToPendingAccounts(
     SELECT UNNEST($1::varchar[])
     ON CONFLICT (account) DO NOTHING;
   `;
+  using client = await pool.connect();
   await client.queryArray(query, [accs]);
 }
 
 export async function loadPendingAccounts(
-  client: Client,
+  pool: Pool,
   batchSize: number,
 ): Promise<string[]> {
-  const result = await client.queryObject<{ account: string }>(
+  const rows = await runQuery<{ account: string }>(
+    pool,
     `SELECT account FROM ledger_loader_pending_accounts ORDER BY id LIMIT ${batchSize}`,
   );
-  return result.rows.map((row) => row.account);
+  return rows.map((row) => row.account);
 }
 
 export async function getNewBlocks(
-  client: Client,
+  pool: Pool,
   allBlocks: string[],
 ): Promise<string[]> {
   if (allBlocks.length === 0) return [];
@@ -252,31 +286,34 @@ export async function getNewBlocks(
 
   for (let i = 0; i < allBlocks.length; i += CHUNK_SIZE) {
     const chunk = allBlocks.slice(i, i + CHUNK_SIZE);
-    const result = await client.queryObject<{ hash: string }>(
+    const rows = await runQuery<{ hash: string }>(
+      pool,
       "SELECT hash FROM ledger_loader_blocks WHERE hash = ANY($1)",
       [chunk],
     );
-    result.rows.forEach((row) => existingBlocks.add(row.hash));
+    rows.forEach((row) => existingBlocks.add(row.hash));
   }
 
   return allBlocks.filter((hash) => !existingBlocks.has(hash));
 }
 
 export async function getHashesFromBlocksQueue(
-  client: Client,
+  pool: Pool,
   limit: number,
 ): Promise<string[]> {
-  const result = await client.queryObject<{ hash: string }>(
+  const rows = await runQuery<{ hash: string }>(
+    pool,
     `SELECT hash FROM ledger_loader_blocks_queue LIMIT ${limit}`,
   );
-  return result.rows.map((row) => row.hash);
+  return rows.map((row) => row.hash);
 }
 
 export async function removeHashesFromBlocksQueue(
-  client: Client,
+  pool: Pool,
   hashes: string[],
 ): Promise<void> {
   if (hashes.length === 0) return;
+  using client = await pool.connect();
   await client.queryArray(
     "DELETE FROM ledger_loader_blocks_queue WHERE hash = ANY($1)",
     [hashes],
@@ -284,17 +321,16 @@ export async function removeHashesFromBlocksQueue(
 }
 
 export async function getFrontiers(
-  client: Client,
+  pool: Pool,
   accounts: string[],
 ): Promise<Record<string, string>> {
   if (accounts.length === 0) return {};
-  const result = await client.queryObject<
-    { account: string; frontier: string }
-  >(
+  const rows = await runQuery<{ account: string; frontier: string }>(
+    pool,
     "SELECT account, frontier FROM ledger_loader_accounts WHERE account = ANY($1)",
     [accounts],
   );
-  const frontiers = result.rows.reduce((acc, row) => {
+  const frontiers = rows.reduce((acc, row) => {
     acc[row.account] = row.frontier;
     return acc;
   }, {} as Record<string, string>);
@@ -308,7 +344,7 @@ export async function getFrontiers(
 }
 
 export async function addBlocksToQueue(
-  client: Client,
+  pool: Pool,
   blockHashes: string[],
 ): Promise<number> {
   if (blockHashes.length === 0) return 0;
@@ -324,6 +360,5 @@ export async function addBlocksToQueue(
       NOT EXISTS (SELECT 1 FROM ledger_loader_blocks_queue bq WHERE bq.hash = h.hash)
     ON CONFLICT (hash) DO NOTHING;
   `;
-  const result = await client.queryArray(query, [blockHashes]);
-  return result.rowCount ?? 0;
+  return await runQueryWithCount(pool, query, [blockHashes]);
 }
