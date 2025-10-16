@@ -167,7 +167,7 @@ export async function saveBlocks(
       "boolean",
       "varchar",
       "numeric",
-      "bigint",
+      "timestamptz",
     ];
 
     for (const [, info] of batchBlocks) {
@@ -191,7 +191,10 @@ export async function saveBlocks(
           info.confirmed === "true",
           info.successor || null,
           info.amount ? info.amount : null,
-          info.local_timestamp ? BigInt(info.local_timestamp) : null,
+          info.local_timestamp
+            ? new Date(Number(BigInt(info.local_timestamp)) * 1000)
+              .toISOString()
+            : null,
         ];
       } else {
         row = [
@@ -211,7 +214,10 @@ export async function saveBlocks(
           !!info.confirmed,
           info.successor || null,
           info.amount ? info.amount : null,
-          info.local_timestamp ? BigInt(info.local_timestamp) : null,
+          info.local_timestamp
+            ? new Date(Number(BigInt(info.local_timestamp)) * 1000)
+              .toISOString()
+            : null,
         ];
       }
       row.forEach((val, i) => columnarData[i].push(val));
@@ -222,7 +228,7 @@ export async function saveBlocks(
       .join(", ");
 
     const query = `
-      INSERT INTO ledger_loader_blocks (${columns.join(", ")})
+      INSERT INTO block_confirmations (${columns.join(", ")})
       SELECT ${unnestClauses}
       ON CONFLICT (hash, local_timestamp) DO NOTHING;
     `;
@@ -288,7 +294,7 @@ export async function getNewBlocks(
     const chunk = allBlocks.slice(i, i + CHUNK_SIZE);
     const rows = await runQuery<{ hash: string }>(
       pool,
-      "SELECT hash FROM ledger_loader_blocks WHERE hash = ANY($1)",
+      "SELECT hash FROM block_confirmations WHERE hash = ANY($1)",
       [chunk],
     );
     rows.forEach((row) => existingBlocks.add(row.hash));
@@ -356,7 +362,7 @@ export async function addBlocksToQueue(
     INSERT INTO ledger_loader_blocks_queue (hash)
     SELECT h.hash FROM hashes h
     WHERE 
-      NOT EXISTS (SELECT 1 FROM ledger_loader_blocks b WHERE b.hash = h.hash) AND
+      NOT EXISTS (SELECT 1 FROM block_confirmations b WHERE b.hash = h.hash) AND
       NOT EXISTS (SELECT 1 FROM ledger_loader_blocks_queue bq WHERE bq.hash = h.hash)
     ON CONFLICT (hash) DO NOTHING;
   `;
