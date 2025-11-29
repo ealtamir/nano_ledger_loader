@@ -432,7 +432,7 @@ export class NanoCrawler {
     Deno.addSignalListener("SIGTERM", signalHandler);
 
     try {
-      // this.accountQueue.push(genesisAccount);
+      this.accountQueue.push(genesisAccount);
 
       while (this.shouldContinue) {
         while (this.shouldContinue && this.accountQueue.length > 0) {

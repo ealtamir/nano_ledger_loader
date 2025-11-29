@@ -1,5 +1,5 @@
 import { config } from "./config_loader.ts";
-import { Database } from "jsr:@db/sqlite@0.12";
+import { Database } from "sqlite";
 
 let db: Database | null = null;
 

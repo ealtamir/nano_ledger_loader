@@ -4,6 +4,7 @@
     "start": "deno run --allow-net --allow-read --allow-env src/main.ts"
   },
   "imports": {
-    "postgres": "jsr:@db/postgres@0.19.4"
+    "postgres": "jsr:@db/postgres@0.19.4",
+    "sqlite": "jsr:@db/sqlite@0.12"
   }
 }

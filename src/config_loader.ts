@@ -20,6 +20,10 @@ const ConfigSchema = z.object({
   ledger_parse_interval: z.number().default(60_000),
   genesis_account: z.string(),
   burn_address: z.string(),
+  // Syncer configuration
+  syncer_enabled: z.boolean().default(true),
+  syncer_interval_ms: z.number().default(5 * 60 * 1000),
+  syncer_batch_size: z.number().default(1000),
 });
 
 // Create a type from the schema

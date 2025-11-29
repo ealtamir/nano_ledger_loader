@@ -45,4 +45,9 @@ export const config = {
   // Whether to identify new blocks
   identify_new_blocks: false,
   indexes_enabled: true,
+
+  // Syncer configuration
+  syncer_enabled: true,
+  syncer_interval_ms: 5 * 60 * 1000, // 5 minutes
+  syncer_batch_size: 1000, // blocks per batch
 };

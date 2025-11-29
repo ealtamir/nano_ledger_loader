@@ -445,7 +445,8 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@db/postgres@0.19.4"
+      "jsr:@db/postgres@0.19.4",
+      "jsr:@db/sqlite@0.12"
     ]
   }
 }
