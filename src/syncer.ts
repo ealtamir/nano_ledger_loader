@@ -36,7 +36,6 @@ export class Syncer {
   private pgPool: Pool;
   private isSyncing: boolean = false;
   private shouldContinue: boolean = true;
-  private syncIntervalId: number | null = null;
 
   constructor(sqlite: Database, pgPool: Pool) {
     this.sqlite = sqlite;
@@ -283,8 +282,83 @@ export class Syncer {
   }
 
   /**
-   * Perform a single sync cycle.
-   * Returns the number of blocks inserted.
+   * Process a single batch of blocks.
+   * Returns stats and whether there are more blocks to process.
+   */
+  private async syncBatch(
+    fromTimestamp: number,
+    batchSize: number,
+  ): Promise<{
+    checked: number;
+    inserted: number;
+    nextTimestamp: number;
+    hasMore: boolean;
+  }> {
+    // Fetch batch of block hashes from SQLite
+    const blockRefs = this.fetchBlockHashes(fromTimestamp, batchSize);
+
+    if (blockRefs.length === 0) {
+      return {
+        checked: 0,
+        inserted: 0,
+        nextTimestamp: fromTimestamp,
+        hasMore: false,
+      };
+    }
+
+    const hashes = blockRefs.map((b) => b.hash);
+    let inserted = 0;
+
+    // Find which hashes are missing in PostgreSQL
+    const missingHashes = await this.findMissingHashes(hashes);
+
+    if (missingHashes.size > 0) {
+      // Fetch full block data from SQLite
+      const blocksToInsert = this.fetchBlocksByHashes([...missingHashes]);
+
+      // Insert into PostgreSQL
+      inserted = await this.insertBlocksToPostgres(blocksToInsert);
+    }
+
+    // Get max timestamp from this batch
+    // Important: We need to handle the case where multiple blocks have the same timestamp
+    const maxTimestamp = Math.max(...blockRefs.map((b) => b.local_timestamp));
+    const blocksAtMaxTimestamp = blockRefs.filter(
+      (b) => b.local_timestamp === maxTimestamp,
+    ).length;
+
+    let nextTimestamp: number;
+
+    // If we got a full batch and the last blocks all have the same timestamp,
+    // there might be more blocks with that timestamp. Keep the same timestamp.
+    // Otherwise, move past it.
+    if (blockRefs.length === batchSize && blocksAtMaxTimestamp === batchSize) {
+      // All blocks have the same timestamp - this is an edge case
+      // We need a secondary ordering mechanism. Since we don't have one,
+      // log a warning and proceed (might cause duplicates, but ON CONFLICT handles it)
+      log.warn(
+        `All ${batchSize} blocks have timestamp ${maxTimestamp}. May cause duplicate processing.`,
+      );
+      nextTimestamp = maxTimestamp;
+    } else if (blockRefs.length < batchSize) {
+      // We got less than a full batch, so we've processed all available blocks
+      nextTimestamp = maxTimestamp + 1;
+    } else {
+      // Full batch with mixed timestamps - move past the max timestamp
+      nextTimestamp = maxTimestamp + 1;
+    }
+
+    return {
+      checked: blockRefs.length,
+      inserted,
+      nextTimestamp,
+      hasMore: blockRefs.length === batchSize,
+    };
+  }
+
+  /**
+   * Perform a full sync - loops continuously until all blocks are synced.
+   * Returns the total number of blocks checked and inserted.
    */
   public async sync(): Promise<{ checked: number; inserted: number }> {
     // Prevent overlapping syncs
@@ -298,87 +372,57 @@ export class Syncer {
     let totalChecked = 0;
     let totalInserted = 0;
     let lastProcessedTimestamp: number | null = null;
+    let batchCount = 0;
 
     try {
       const state = this.getSyncState();
       const batchSize = config.syncer_batch_size;
+      let currentTimestamp = state.last_synced_timestamp;
 
-      log.info(`Starting sync from timestamp ${state.last_synced_timestamp}`);
+      log.info(`Starting full sync from timestamp ${currentTimestamp}`);
 
-      // Fetch batch of block hashes from SQLite
-      const blockRefs = this.fetchBlockHashes(
-        state.last_synced_timestamp,
-        batchSize,
-      );
+      // Loop until we've processed all available blocks
+      while (this.shouldContinue) {
+        const result = await this.syncBatch(currentTimestamp, batchSize);
+        batchCount++;
 
-      if (blockRefs.length === 0) {
-        log.info("No new blocks to sync");
-        this.completeSyncRun(runId, 0, 0, null, "completed");
-        return { checked: 0, inserted: 0 };
+        totalChecked += result.checked;
+        totalInserted += result.inserted;
+
+        if (result.checked > 0) {
+          lastProcessedTimestamp = result.nextTimestamp;
+          // Update sync state after each batch to track progress
+          this.updateSyncState(result.nextTimestamp);
+          currentTimestamp = result.nextTimestamp;
+
+          // Log progress periodically
+          if (batchCount % 10 === 0 || result.inserted > 0) {
+            log.info(
+              `Sync progress: batch ${batchCount}, checked ${totalChecked}, inserted ${totalInserted}, timestamp ${currentTimestamp}`,
+            );
+          }
+        }
+
+        // Exit loop if no more blocks to process
+        if (!result.hasMore) {
+          log.info(
+            `Sync caught up - no more blocks after timestamp ${currentTimestamp}`,
+          );
+          break;
+        }
       }
 
-      totalChecked = blockRefs.length;
-      const hashes = blockRefs.map((b) => b.hash);
-
-      // Find which hashes are missing in PostgreSQL
-      const missingHashes = await this.findMissingHashes(hashes);
-
-      if (missingHashes.size > 0) {
-        log.info(`Found ${missingHashes.size} blocks missing in PostgreSQL`);
-
-        // Fetch full block data from SQLite
-        const blocksToInsert = this.fetchBlocksByHashes([...missingHashes]);
-
-        // Insert into PostgreSQL
-        totalInserted = await this.insertBlocksToPostgres(blocksToInsert);
-        log.info(`Inserted ${totalInserted} blocks into PostgreSQL`);
-      } else {
-        log.debug("All blocks already present in PostgreSQL");
-      }
-
-      // Get max timestamp from this batch
-      // Important: We need to handle the case where multiple blocks have the same timestamp
-      // To avoid re-processing the same blocks, we move to timestamp + 1 if we processed all blocks
-      // with that timestamp, otherwise we keep the same timestamp
-      const maxTimestamp = Math.max(...blockRefs.map((b) => b.local_timestamp));
-      const blocksAtMaxTimestamp = blockRefs.filter(
-        (b) => b.local_timestamp === maxTimestamp,
-      ).length;
-
-      // If we got a full batch and the last blocks all have the same timestamp,
-      // there might be more blocks with that timestamp. Keep the same timestamp.
-      // Otherwise, move past it.
-      if (
-        blockRefs.length === batchSize && blocksAtMaxTimestamp === batchSize
-      ) {
-        // All blocks have the same timestamp - this is an edge case
-        // We need a secondary ordering mechanism. Since we don't have one,
-        // log a warning and proceed (might cause duplicates, but ON CONFLICT handles it)
-        log.warn(
-          `All ${batchSize} blocks have timestamp ${maxTimestamp}. May cause duplicate processing.`,
-        );
-        lastProcessedTimestamp = maxTimestamp;
-      } else if (blockRefs.length < batchSize) {
-        // We got less than a full batch, so we've processed all available blocks
-        // Move to maxTimestamp + 1 to avoid reprocessing
-        lastProcessedTimestamp = maxTimestamp + 1;
-      } else {
-        // Full batch with mixed timestamps - move past the max timestamp
-        lastProcessedTimestamp = maxTimestamp + 1;
-      }
-
-      // Update sync state
-      this.updateSyncState(lastProcessedTimestamp);
-
+      const status = this.shouldContinue ? "completed" : "interrupted";
       this.completeSyncRun(
         runId,
         totalChecked,
         totalInserted,
         lastProcessedTimestamp,
-        "completed",
+        status,
       );
+
       log.info(
-        `Sync completed: checked ${totalChecked}, inserted ${totalInserted}, next timestamp: ${lastProcessedTimestamp}`,
+        `Sync ${status}: ${batchCount} batches, checked ${totalChecked}, inserted ${totalInserted}`,
       );
 
       return { checked: totalChecked, inserted: totalInserted };
@@ -403,6 +447,7 @@ export class Syncer {
 
   /**
    * Start the periodic sync process.
+   * Syncs all blocks continuously, then waits for interval before next sync.
    */
   public start(): void {
     if (!config.syncer_enabled) {
@@ -410,53 +455,83 @@ export class Syncer {
       return;
     }
 
-    log.info(`Starting syncer with interval ${config.syncer_interval_ms}ms`);
+    log.info(
+      `Starting syncer with interval ${config.syncer_interval_ms}ms between sync cycles`,
+    );
     this.shouldContinue = true;
 
-    // Run initial sync immediately
-    this.runSyncCycle();
-
-    // Schedule periodic syncs
-    this.syncIntervalId = setInterval(() => {
-      if (this.shouldContinue) {
-        this.runSyncCycle();
-      }
-    }, config.syncer_interval_ms);
+    // Run the sync loop
+    this.runSyncLoop();
   }
 
   /**
-   * Run a sync cycle with error handling.
+   * Run the sync loop - syncs all blocks, waits for interval, repeats.
    */
-  private async runSyncCycle(): Promise<void> {
-    if (!this.shouldContinue) return;
+  private async runSyncLoop(): Promise<void> {
+    while (this.shouldContinue) {
+      try {
+        // Perform a full sync (processes all available blocks)
+        const result = await this.sync();
 
-    try {
-      await this.sync();
-    } catch (error) {
-      log.error(
-        `Sync cycle failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-      // Continue running - next cycle will retry
+        if (!this.shouldContinue) break;
+
+        // If we synced blocks, check again immediately in case new blocks arrived
+        // Otherwise, wait for the configured interval
+        if (result.checked > 0) {
+          log.info("Sync cycle complete, checking for new blocks...");
+          // Small delay to prevent tight loop if blocks are arriving continuously
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        } else {
+          log.info(
+            `No blocks to sync, waiting ${config.syncer_interval_ms}ms before next check`,
+          );
+          await this.sleep(config.syncer_interval_ms);
+        }
+      } catch (error) {
+        log.error(
+          `Sync cycle failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        // Wait before retrying on error
+        if (this.shouldContinue) {
+          await this.sleep(config.syncer_interval_ms);
+        }
+      }
     }
+
+    log.info("Sync loop stopped");
   }
 
   /**
-   * Stop the periodic sync process.
+   * Sleep for the specified duration, but can be interrupted by stop().
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const checkInterval = 100; // Check every 100ms if we should stop
+      let elapsed = 0;
+
+      const intervalId = setInterval(() => {
+        elapsed += checkInterval;
+        if (!this.shouldContinue || elapsed >= ms) {
+          clearInterval(intervalId);
+          resolve();
+        }
+      }, checkInterval);
+    });
+  }
+
+  /**
+   * Stop the sync process gracefully.
+   * Will complete the current batch before stopping.
    */
   public stop(): void {
     log.info("Stopping syncer...");
     this.shouldContinue = false;
 
-    if (this.syncIntervalId !== null) {
-      clearInterval(this.syncIntervalId);
-      this.syncIntervalId = null;
-    }
-
-    // Wait for current sync to complete if one is in progress
+    // If a sync is in progress, it will stop after the current batch
     if (this.isSyncing) {
-      log.info("Waiting for current sync to complete...");
+      log.info("Waiting for current sync batch to complete...");
     }
   }
 
