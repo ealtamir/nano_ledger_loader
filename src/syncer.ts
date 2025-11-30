@@ -13,7 +13,7 @@ interface BlockRow {
   account: string | null;
   previous: string | null;
   representative: string | null;
-  balance: number | null;
+  balance: string | null; // TEXT to preserve 128-bit integer precision
   link: string | null;
   link_as_account: string | null;
   destination: string | null;
@@ -23,13 +23,20 @@ interface BlockRow {
   height: number | null;
   confirmed: boolean | null;
   successor: string | null;
-  amount: number | null;
+  amount: string | null; // TEXT to preserve 128-bit integer precision
   local_timestamp: number | null;
 }
 
 /**
  * Syncer class that synchronizes blocks from SQLite to PostgreSQL.
  * Runs periodically and tracks sync progress in SQLite.
+ *
+ * Design decisions:
+ * - Uses SQLite as source of truth, PostgreSQL as destination
+ * - Tracks progress via last_synced_timestamp in SQLite
+ * - Processes blocks in batches to avoid memory issues
+ * - Prevents overlapping syncs with isSyncing flag
+ * - Stores run statistics for monitoring/debugging
  */
 export class Syncer {
   private sqlite: Database;
@@ -175,6 +182,9 @@ export class Syncer {
 
   /**
    * Fetch full block rows from SQLite by hashes.
+   * Note: balance and amount are cast to TEXT to preserve 128-bit integer precision.
+   * Reason: SQLite stores large integers as REAL (64-bit float) which loses precision.
+   *         Casting to TEXT preserves the original string representation.
    */
   private fetchBlocksByHashes(hashes: string[]): BlockRow[] {
     if (hashes.length === 0) return [];
@@ -182,9 +192,12 @@ export class Syncer {
     // SQLite doesn't support array parameters directly, so we use IN clause
     const placeholders = hashes.map(() => "?").join(", ");
     const query = `
-      SELECT hash, type, account, previous, representative, balance,
+      SELECT hash, type, account, previous, representative, 
+             CAST(balance AS TEXT) as balance,
              link, link_as_account, destination, signature, work,
-             subtype, height, confirmed, successor, amount, local_timestamp
+             subtype, height, confirmed, successor, 
+             CAST(amount AS TEXT) as amount, 
+             local_timestamp
       FROM blocks
       WHERE hash IN (${placeholders})
     `;
@@ -194,6 +207,7 @@ export class Syncer {
 
   /**
    * Insert blocks into PostgreSQL block_confirmations table.
+   * Uses unnest for efficient bulk insertion.
    */
   private async insertBlocksToPostgres(blocks: BlockRow[]): Promise<number> {
     if (blocks.length === 0) return 0;
@@ -247,7 +261,7 @@ export class Syncer {
       columnarData[2].push(block.account);
       columnarData[3].push(block.previous);
       columnarData[4].push(block.representative);
-      columnarData[5].push(block.balance?.toString() ?? null);
+      columnarData[5].push(block.balance); // Already string from SQLite CAST
       columnarData[6].push(block.link);
       columnarData[7].push(block.link_as_account);
       columnarData[8].push(block.destination);
@@ -257,7 +271,7 @@ export class Syncer {
       columnarData[12].push(block.height);
       columnarData[13].push(block.confirmed);
       columnarData[14].push(block.successor);
-      columnarData[15].push(block.amount?.toString() ?? null);
+      columnarData[15].push(block.amount); // Already string from SQLite CAST
       // Convert Unix timestamp to ISO string for timestamptz
       columnarData[16].push(
         block.local_timestamp
@@ -335,7 +349,7 @@ export class Syncer {
     if (blockRefs.length === batchSize && blocksAtMaxTimestamp === batchSize) {
       // All blocks have the same timestamp - this is an edge case
       // We need a secondary ordering mechanism. Since we don't have one,
-      // log a warning and proceed (might cause duplicates, but ON CONFLICT handles it)
+      // log a warning and proceed (might cause duplicate processing, but ON CONFLICT handles it)
       log.warn(
         `All ${batchSize} blocks have timestamp ${maxTimestamp}. May cause duplicate processing.`,
       );

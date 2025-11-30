@@ -58,7 +58,7 @@ export function initializeDatabase(): Database {
       account TEXT,
       previous TEXT,
       representative TEXT,
-      balance INTEGER,
+      balance TEXT,
       link TEXT,
       link_as_account TEXT,
       destination TEXT,
