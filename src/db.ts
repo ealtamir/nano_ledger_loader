@@ -68,7 +68,7 @@ export function initializeDatabase(): Database {
       height INTEGER,
       confirmed BOOLEAN,
       successor TEXT,
-      amount INTEGER,
+      amount TEXT,
       local_timestamp INTEGER
     )
   `);
